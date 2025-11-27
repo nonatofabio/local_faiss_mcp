@@ -7,12 +7,10 @@ as a local vector database.
 """
 
 import os
-import sys
 import argparse
 import json
 from pathlib import Path
 from typing import Any
-import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 from mcp.server import Server
