@@ -10,6 +10,22 @@ A Model Context Protocol (MCP) server that provides local vector database functi
 - **Persistent Storage**: Indexes and metadata are saved to disk
 - **MCP Compatible**: Works with any MCP-compatible AI agent or client
 
+## Quickstart
+
+```bash
+git clone https://github.com/nonatofabio/local_faiss_mcp.git
+cd local_faiss_mcp && pip install -r requirements.txt
+python server.py --index-dir ./.vector_store
+```
+
+Then configure your MCP client (see [Configuration](#configuration-with-mcp-clients)) and try your first query in Claude:
+
+```
+Use the query_rag_store tool to search for: "How does FAISS perform similarity search?"
+```
+
+Claude will retrieve relevant document chunks from your vector store and use them to answer your question.
+
 ## Installation
 
 1. Create a virtual environment:
