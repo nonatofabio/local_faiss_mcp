@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Standalone test for the FAISS vector store.
 Tests document ingestion and querying without MCP infrastructure.
@@ -7,6 +8,11 @@ Tests document ingestion and querying without MCP infrastructure.
 import os
 import sys
 from pathlib import Path
+
+# Ensure UTF-8 encoding for output on Windows
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Add current directory to path to import server module
 sys.path.insert(0, str(Path(__file__).parent))

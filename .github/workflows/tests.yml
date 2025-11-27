@@ -29,7 +29,7 @@ jobs:
 
     - name: Verify server can be imported
       run: |
-        python -c "from server import FAISSVectorStore; print('✓ Server module imported successfully')"
+        python -c "from server import FAISSVectorStore; print('Server module imported successfully')"
 
     - name: Run standalone tests
       run: |
@@ -47,12 +47,12 @@ jobs:
             index_path='test.index',
             metadata_path='test_metadata.json'
         )
-        print('✓ Vector store initialized')
+        print('Vector store initialized')
 
         # Cleanup
         Path('test.index').unlink(missing_ok=True)
         Path('test_metadata.json').unlink(missing_ok=True)
-        print('✓ All initialization tests passed')
+        print('All initialization tests passed')
         "
 
   lint:
