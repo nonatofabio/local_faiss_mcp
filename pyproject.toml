@@ -1,0 +1,20 @@
+[project]
+name = "local-faiss-mcp"
+version = "0.1.0"
+description = "MCP server with FAISS local vector database for RAG"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=0.9.0",
+    "faiss-cpu>=1.8.0",
+    "sentence-transformers>=2.2.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
