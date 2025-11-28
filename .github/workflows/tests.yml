@@ -22,14 +22,18 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install package
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -e .
 
-    - name: Verify server can be imported
+    - name: Verify package can be imported
       run: |
-        python -c "from server import FAISSVectorStore; print('Server module imported successfully')"
+        python -c "from local_faiss_mcp import FAISSVectorStore; print('Package imported successfully')"
+
+    - name: Verify CLI command is installed
+      run: |
+        local-faiss-mcp --help
 
     - name: Run standalone tests
       run: |
@@ -40,7 +44,7 @@ jobs:
         python -c "
         import sys
         from pathlib import Path
-        from server import FAISSVectorStore
+        from local_faiss_mcp import FAISSVectorStore
 
         # Test basic initialization
         store = FAISSVectorStore(
@@ -77,4 +81,4 @@ jobs:
 
     - name: Check Python syntax
       run: |
-        python -m py_compile server.py test_standalone.py
+        python -m py_compile local_faiss_mcp/server.py local_faiss_mcp/__init__.py local_faiss_mcp/__main__.py test_standalone.py
