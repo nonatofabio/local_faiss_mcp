@@ -7,6 +7,8 @@
 
 A Model Context Protocol (MCP) server that provides local vector database functionality using FAISS for Retrieval-Augmented Generation (RAG) applications.
 
+![demo](./static/demo.gif)
+
 ## Features
 
 - **Local Vector Storage**: Uses FAISS for efficient similarity search without external dependencies
