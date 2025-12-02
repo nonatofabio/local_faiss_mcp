@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
+      "command": "local-faiss-mcp",
       "args": [
-        "/path/to/local_faiss_mcp/server.py",
         "--index-dir",
         "./.vector_store"
       ]

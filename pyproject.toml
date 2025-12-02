@@ -2,7 +2,24 @@
 name = "local-faiss-mcp"
 version = "0.1.0"
 description = "MCP server with FAISS local vector database for RAG"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Fabio Nonato", email = "nonatofabio@gmail.com"}
+]
+keywords = ["mcp", "faiss", "rag", "vector-database", "semantic-search", "embeddings", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
 dependencies = [
     "mcp>=0.9.0",
     "faiss-cpu>=1.8.0",
@@ -10,10 +27,24 @@ dependencies = [
     "numpy>=1.24.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/nonatofabio/local_faiss_mcp"
+Repository = "https://github.com/nonatofabio/local_faiss_mcp"
+Issues = "https://github.com/nonatofabio/local_faiss_mcp/issues"
+
+[project.scripts]
+local-faiss-mcp = "local_faiss_mcp.server:cli_main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["local_faiss_mcp*"]
 
 [build-system]
 requires = ["setuptools>=68.0.0", "wheel"]

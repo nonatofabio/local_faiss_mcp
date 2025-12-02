@@ -42,17 +42,20 @@ The system has three main components:
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install in development mode
+pip install -e .
 ```
 
 ### Running the Server
 ```bash
-# Run MCP server via stdio (uses current directory for index)
-python server.py
+# Using the installed command (easiest)
+local-faiss-mcp --index-dir /path/to/index/directory
 
-# Run with custom index directory
-python server.py --index-dir /path/to/index/directory
+# As a Python module
+python -m local_faiss_mcp --index-dir /path/to/index/directory
+
+# Direct execution (for development)
+python local_faiss_mcp/server.py --index-dir /path/to/index/directory
 ```
 
 **Command-line Arguments:**
@@ -64,14 +67,33 @@ python server.py --index-dir /path/to/index/directory
 pytest
 ```
 
+### Building and Publishing
+```bash
+# Build package
+python -m build
+
+# Check package
+twine check dist/*
+
+# Publish to PyPI (see PUBLISHING.md for details)
+twine upload dist/*
+```
+
 ## Implementation Details
 
 ### File Structure
-- `server.py`: Main MCP server implementation with FAISSVectorStore class
-- `faiss.index`: Persisted FAISS index (created automatically in --index-dir)
-- `metadata.json`: Document metadata storage (created automatically in --index-dir)
+- `local_faiss_mcp/`: Main package directory
+  - `server.py`: MCP server implementation with FAISSVectorStore class
+  - `__init__.py`: Package initialization
+  - `__main__.py`: Entry point for `python -m local_faiss_mcp`
+- `test_standalone.py`: Standalone tests
 - `pyproject.toml`: Project configuration and dependencies
 - `requirements.txt`: Python dependencies
+- `PUBLISHING.md`: Guide for publishing to PyPI
+
+### Data Files (Created at Runtime)
+- `faiss.index`: Persisted FAISS index (created in --index-dir)
+- `metadata.json`: Document metadata storage (created in --index-dir)
 
 ### Configuring Index Directory
 
@@ -87,9 +109,8 @@ User-wide (`~/.claude/.mcp.json`):
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
+      "command": "local-faiss-mcp",
       "args": [
-        "/path/to/local_faiss_mcp/server.py",
         "--index-dir",
         "/path/to/vector_indexes/general"
       ]
@@ -103,9 +124,24 @@ Project-specific (`./.mcp.json` in project root):
 {
   "mcpServers": {
     "project-faiss": {
+      "command": "local-faiss-mcp",
+      "args": [
+        "--index-dir",
+        "./.vector_store"
+      ]
+    }
+  }
+}
+```
+
+Alternative using Python module (if command not in PATH):
+```json
+{
+  "mcpServers": {
+    "local-faiss-mcp": {
       "command": "python",
       "args": [
-        "/path/to/local_faiss_mcp/server.py",
+        "-m", "local_faiss_mcp",
         "--index-dir",
         "./.vector_store"
       ]

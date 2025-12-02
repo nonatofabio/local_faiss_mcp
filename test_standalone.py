@@ -14,10 +14,8 @@ if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# Add current directory to path to import server module
-sys.path.insert(0, str(Path(__file__).parent))
-
-from server import FAISSVectorStore
+# Import from the package
+from local_faiss_mcp import FAISSVectorStore
 
 
 def test_vector_store():

@@ -18,9 +18,7 @@ A Model Context Protocol (MCP) server that provides local vector database functi
 ## Quickstart
 
 ```bash
-git clone https://github.com/nonatofabio/local_faiss_mcp.git
-cd local_faiss_mcp && pip install -r requirements.txt
-python server.py --index-dir ./.vector_store
+pip install local-faiss-mcp
 ```
 
 Then configure your MCP client (see [Configuration](#configuration-with-mcp-clients)) and try your first query in Claude:
@@ -33,29 +31,39 @@ Claude will retrieve relevant document chunks from your vector store and use the
 
 ## Installation
 
-1. Create a virtual environment:
+### From PyPI (Recommended)
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install local-faiss-mcp
 ```
 
-2. Install dependencies:
+### From Source
+
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/nonatofabio/local_faiss_mcp.git
+cd local_faiss_mcp
+pip install -e .
 ```
 
 ## Usage
 
 ### Running the Server
 
-Run the MCP server using stdio transport:
+After installation, you can run the server in three ways:
 
+**1. Using the installed command (easiest):**
 ```bash
-# Use current directory for index storage (default)
-python server.py
+local-faiss-mcp --index-dir /path/to/index/directory
+```
 
-# Specify a custom directory for index storage
-python server.py --index-dir /path/to/index/directory
+**2. As a Python module:**
+```bash
+python -m local_faiss_mcp --index-dir /path/to/index/directory
+```
+
+**3. For development/testing:**
+```bash
+python local_faiss_mcp/server.py --index-dir /path/to/index/directory
 ```
 
 **Command-line Arguments:**
@@ -112,8 +120,7 @@ Add this server to your Claude Code MCP configuration (`.mcp.json`):
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
-      "args": ["/home/user/localdev/local_faiss_mcp/server.py"]
+      "command": "local-faiss-mcp"
     }
   }
 }
@@ -124,9 +131,8 @@ Add this server to your Claude Code MCP configuration (`.mcp.json`):
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
+      "command": "local-faiss-mcp",
       "args": [
-        "/home/user/localdev/local_faiss_mcp/server.py",
         "--index-dir",
         "/home/user/vector_indexes/my_project"
       ]
@@ -140,12 +146,23 @@ Add this server to your Claude Code MCP configuration (`.mcp.json`):
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
+      "command": "local-faiss-mcp",
       "args": [
-        "/home/user/localdev/local_faiss_mcp/server.py",
         "--index-dir",
         "./.vector_store"
       ]
+    }
+  }
+}
+```
+
+**Alternative: Using Python module** (if the command isn't in PATH):
+```json
+{
+  "mcpServers": {
+    "local-faiss-mcp": {
+      "command": "python",
+      "args": ["-m", "local_faiss_mcp", "--index-dir", "./.vector_store"]
     }
   }
 }
@@ -159,8 +176,8 @@ Add this server to your Claude Desktop configuration:
 {
   "mcpServers": {
     "local-faiss-mcp": {
-      "command": "python",
-      "args": ["/path/to/local_faiss_mcp/server.py", "--index-dir", "/path/to/index/directory"]
+      "command": "local-faiss-mcp",
+      "args": ["--index-dir", "/path/to/index/directory"]
     }
   }
 }
