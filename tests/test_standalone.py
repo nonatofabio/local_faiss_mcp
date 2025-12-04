@@ -9,13 +9,20 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure UTF-8 encoding for output on Windows
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
 # Import from the package
 from local_faiss_mcp import FAISSVectorStore
+
+
+# Ensure UTF-8 encoding for output on Windows (only when run as script, not pytest)
+def _setup_windows_encoding():
+    """Setup UTF-8 encoding for Windows console output when running standalone."""
+    if sys.platform == "win32" and not hasattr(sys, '_called_from_test'):
+        try:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        except (AttributeError, ValueError):
+            # Already wrapped or pytest is capturing - skip
+            pass
 
 
 def test_vector_store():
@@ -154,6 +161,8 @@ def test_vector_store():
 
 
 if __name__ == "__main__":
+    # Setup Windows encoding only when run as standalone script
+    _setup_windows_encoding()
     print("\nStarting standalone test...\n")
     success = test_vector_store()
     sys.exit(0 if success else 1)
