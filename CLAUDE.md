@@ -51,6 +51,9 @@ pip install -e .
 # Using the installed command (easiest)
 local-faiss-mcp --index-dir /path/to/index/directory
 
+# With custom embedding model
+local-faiss-mcp --index-dir /path/to/index/directory --embed all-mpnet-base-v2
+
 # As a Python module
 python -m local_faiss_mcp --index-dir /path/to/index/directory
 
@@ -60,6 +63,7 @@ python local_faiss_mcp/server.py --index-dir /path/to/index/directory
 
 **Command-line Arguments:**
 - `--index-dir`: Directory to store FAISS index and metadata (default: current directory)
+- `--embed`: Hugging Face embedding model name (default: all-MiniLM-L6-v2)
 
 ### Testing
 ```bash
@@ -154,14 +158,17 @@ Alternative using Python module (if command not in PATH):
 
 The core class managing vector operations:
 
-- **Embedding Model**: `all-MiniLM-L6-v2` (384-dimensional embeddings)
+- **Embedding Model**: Configurable via `embedding_model_name` parameter (default: `all-MiniLM-L6-v2`)
+  - Supports any Hugging Face sentence-transformers model
+  - Automatically detects embedding dimensions
+  - Validates dimension compatibility when loading existing indexes
 - **Index Type**: `IndexFlatL2` - exact L2 distance search
 - **Chunking Strategy**: 500 words per chunk with 50-word overlap
 - **Persistence**: Auto-saves index and metadata after ingestion
 - **Directory Management**: Automatically creates index directory if it doesn't exist
 
 Key methods:
-- `__init__(index_path, metadata_path)`: Initializes store and creates directories
+- `__init__(index_path, metadata_path, embedding_model_name)`: Initializes store with custom model
 - `chunk_text()`: Splits documents into overlapping chunks
 - `ingest()`: Embeds and stores document chunks in FAISS
 - `query()`: Performs similarity search and retrieves top-k results

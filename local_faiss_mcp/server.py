@@ -7,6 +7,7 @@ as a local vector database.
 """
 
 import os
+import sys
 import argparse
 import json
 from pathlib import Path
@@ -21,11 +22,22 @@ from mcp.server.stdio import stdio_server
 class FAISSVectorStore:
     """Manages FAISS index and document storage."""
 
-    def __init__(self, index_path: str = "faiss.index", metadata_path: str = "metadata.json"):
+    def __init__(
+        self,
+        index_path: str = "faiss.index",
+        metadata_path: str = "metadata.json",
+        embedding_model_name: str = "all-MiniLM-L6-v2"
+    ):
         self.index_path = index_path
         self.metadata_path = metadata_path
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.dimension = 384  # Dimension for all-MiniLM-L6-v2
+        self.embedding_model_name = embedding_model_name
+
+        # Load the embedding model
+        self.embedding_model = SentenceTransformer(embedding_model_name)
+
+        # Get dimension from the model by encoding a test string
+        test_embedding = self.embedding_model.encode(["test"], convert_to_numpy=True)
+        self.dimension = test_embedding.shape[1]
 
         # Ensure the directory exists
         os.makedirs(os.path.dirname(os.path.abspath(index_path)) or '.', exist_ok=True)
@@ -34,6 +46,13 @@ class FAISSVectorStore:
         # Load or create index
         if os.path.exists(index_path):
             self.index = faiss.read_index(index_path)
+            # Verify dimension matches
+            if self.index.d != self.dimension:
+                raise ValueError(
+                    f"Existing index dimension ({self.index.d}) does not match "
+                    f"embedding model dimension ({self.dimension}). "
+                    f"Please use a different index directory or the same embedding model."
+                )
         else:
             self.index = faiss.IndexFlatL2(self.dimension)
 
@@ -42,7 +61,7 @@ class FAISSVectorStore:
             with open(metadata_path, 'r') as f:
                 self.metadata = json.load(f)
         else:
-            self.metadata = {"documents": []}
+            self.metadata = {"documents": [], "model": embedding_model_name}
 
     def save(self):
         """Persist index and metadata to disk."""
@@ -221,17 +240,28 @@ async def main():
         default=".",
         help="Directory to store FAISS index and metadata (default: current directory)"
     )
+    parser.add_argument(
+        "--embed",
+        type=str,
+        default="all-MiniLM-L6-v2",
+        help="Hugging Face embedding model name (default: all-MiniLM-L6-v2)"
+    )
     args = parser.parse_args()
 
-    # Initialize vector store with configured paths
+    # Initialize vector store with configured paths and embedding model
     index_dir = Path(args.index_dir).resolve()
     index_path = index_dir / "faiss.index"
     metadata_path = index_dir / "metadata.json"
 
+    print(f"Initializing with embedding model: {args.embed}", file=sys.stderr)
+
     vector_store = FAISSVectorStore(
         index_path=str(index_path),
-        metadata_path=str(metadata_path)
+        metadata_path=str(metadata_path),
+        embedding_model_name=args.embed
     )
+
+    print(f"Vector store initialized (dimension: {vector_store.dimension})", file=sys.stderr)
 
     async with stdio_server() as (read_stream, write_stream):
         await app.run(

@@ -70,6 +70,19 @@ python local_faiss_mcp/server.py --index-dir /path/to/index/directory
 
 **Command-line Arguments:**
 - `--index-dir`: Directory to store FAISS index and metadata files (default: current directory)
+- `--embed`: Hugging Face embedding model name (default: `all-MiniLM-L6-v2`)
+
+**Using a Custom Embedding Model:**
+```bash
+# Use a larger, more accurate model
+local-faiss-mcp --index-dir ./.vector_store --embed all-mpnet-base-v2
+
+# Use a multilingual model
+local-faiss-mcp --index-dir ./.vector_store --embed paraphrase-multilingual-MiniLM-L12-v2
+
+# Use any Hugging Face sentence-transformers model
+local-faiss-mcp --index-dir ./.vector_store --embed sentence-transformers/model-name
+```
 
 The server will:
 - Create the index directory if it doesn't exist
@@ -143,6 +156,23 @@ Add this server to your Claude Code MCP configuration (`.mcp.json`):
 }
 ```
 
+**With custom embedding model**:
+```json
+{
+  "mcpServers": {
+    "local-faiss-mcp": {
+      "command": "local-faiss-mcp",
+      "args": [
+        "--index-dir",
+        "./.vector_store",
+        "--embed",
+        "all-mpnet-base-v2"
+      ]
+    }
+  }
+}
+```
+
 **Project-specific configuration** (`./.mcp.json` in your project):
 ```json
 {
@@ -187,10 +217,26 @@ Add this server to your Claude Desktop configuration:
 
 ## Architecture
 
-- **Embedding Model**: Uses `all-MiniLM-L6-v2` from sentence-transformers (384 dimensions)
+- **Embedding Model**: Configurable via `--embed` flag (default: `all-MiniLM-L6-v2` with 384 dimensions)
+  - Supports any Hugging Face sentence-transformers model
+  - Automatically detects embedding dimensions
+  - Model choice persisted with the index
 - **Index Type**: FAISS IndexFlatL2 for exact L2 distance search
 - **Chunking**: Documents are split into ~500 word chunks with 50 word overlap
 - **Storage**: Index saved as `faiss.index`, metadata saved as `metadata.json`
+
+### Choosing an Embedding Model
+
+Different models offer different trade-offs:
+
+| Model | Dimensions | Speed | Quality | Use Case |
+|-------|-----------|-------|---------|----------|
+| `all-MiniLM-L6-v2` | 384 | Fast | Good | Default, balanced performance |
+| `all-mpnet-base-v2` | 768 | Medium | Better | Higher quality embeddings |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 384 | Fast | Good | Multilingual support |
+| `all-MiniLM-L12-v2` | 384 | Medium | Better | Better quality at same size |
+
+**Important:** Once you create an index with a specific model, you must use the same model for subsequent runs. The server will detect dimension mismatches and warn you.
 
 ## Development
 
