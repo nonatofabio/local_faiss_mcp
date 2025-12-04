@@ -258,10 +258,23 @@ This test:
 
 ### Unit Tests
 
-Run unit tests:
+Run the complete test suite:
 ```bash
-pytest
+pytest tests/ -v
 ```
+
+Run specific test files:
+```bash
+# Test embedding model functionality
+pytest tests/test_embedding_models.py -v
+
+# Run standalone integration test
+python tests/test_standalone.py
+```
+
+The test suite includes:
+- **test_embedding_models.py**: Comprehensive tests for custom embedding models, dimension detection, and compatibility
+- **test_standalone.py**: End-to-end integration test without MCP infrastructure
 
 ## License
 

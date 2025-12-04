@@ -35,9 +35,9 @@ jobs:
       run: |
         local-faiss-mcp --help
 
-    - name: Run standalone tests
+    - name: Run all tests with pytest
       run: |
-        python test_standalone.py
+        pytest tests/ -v
 
     - name: Test server initialization
       run: |
@@ -81,4 +81,4 @@ jobs:
 
     - name: Check Python syntax
       run: |
-        python -m py_compile local_faiss_mcp/server.py local_faiss_mcp/__init__.py local_faiss_mcp/__main__.py test_standalone.py
+        python -m py_compile local_faiss_mcp/server.py local_faiss_mcp/__init__.py local_faiss_mcp/__main__.py tests/test_standalone.py tests/test_embedding_models.py
