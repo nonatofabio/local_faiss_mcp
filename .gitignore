@@ -44,3 +44,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+#MCP
+MCP_REGISTRY.md
