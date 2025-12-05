@@ -176,7 +176,7 @@ Key methods:
 
 ### MCP Tools
 
-Both tools are defined in `server.py`:
+Two tools are defined in `server.py`:
 
 1. **ingest_document**
    - Accepts `document` (text) and optional `source` (identifier)
@@ -187,6 +187,27 @@ Both tools are defined in `server.py`:
    - Accepts `query` (text) and optional `top_k` (number)
    - Returns ranked results with distance scores
    - Handles empty index gracefully
+
+### MCP Prompts
+
+Two prompts are defined in `server.py` for answer extraction and summarization:
+
+1. **extract-answer**
+   - Helps extract relevant answers from retrieved document chunks
+   - Arguments: `query` (the original question), `chunks` (JSON array of retrieved documents)
+   - Provides structured answers with source citations
+   - Use after `query_rag_store` to get well-formatted responses
+
+2. **summarize-documents**
+   - Summarizes information from multiple document chunks
+   - Arguments: `topic`, `chunks` (JSON array), optional `max_length`
+   - Creates focused summaries with proper attribution
+   - Useful for synthesizing information across multiple sources
+
+**Typical workflow:**
+1. Use `query_rag_store` tool to retrieve relevant chunks
+2. Use `extract-answer` or `summarize-documents` prompt with the results
+3. Get structured, citation-backed responses
 
 ### Server Initialization (server.py:main)
 

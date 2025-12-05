@@ -92,6 +92,8 @@ The server will:
 
 ### Available Tools
 
+The server provides two tools for document management:
+
 #### 1. ingest_document
 
 Ingest a document into the vector store.
@@ -123,6 +125,48 @@ Query the vector store for relevant document chunks.
   "top_k": 5
 }
 ```
+
+### Available Prompts
+
+The server provides MCP prompts to help extract answers and summarize information from retrieved documents:
+
+#### 1. extract-answer
+
+Extract the most relevant answer from retrieved document chunks with proper citations.
+
+**Arguments:**
+- `query` (required): The original user query or question
+- `chunks` (required): Retrieved document chunks as JSON array with fields: `text`, `source`, `distance`
+
+**Use Case:** After querying the RAG store, use this prompt to get a well-formatted answer that cites sources and explains relevance.
+
+**Example workflow in Claude:**
+1. Use `query_rag_store` tool to retrieve relevant chunks
+2. Use `extract-answer` prompt with the query and results
+3. Get a comprehensive answer with citations
+
+#### 2. summarize-documents
+
+Create a focused summary from multiple document chunks.
+
+**Arguments:**
+- `topic` (required): The topic or theme to summarize
+- `chunks` (required): Document chunks to summarize as JSON array
+- `max_length` (optional): Maximum summary length in words (default: 200)
+
+**Use Case:** Synthesize information from multiple retrieved documents into a concise summary.
+
+**Example Usage:**
+
+In Claude Code, after retrieving documents with `query_rag_store`, you can use the prompts like:
+
+```
+Use the extract-answer prompt with:
+- query: "What is FAISS?"
+- chunks: [the JSON results from query_rag_store]
+```
+
+The prompts will guide the LLM to provide structured, citation-backed answers based on your vector store data.
 
 ## Configuration with MCP Clients
 

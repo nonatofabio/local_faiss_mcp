@@ -15,7 +15,7 @@ from typing import Any
 import faiss
 from sentence_transformers import SentenceTransformer
 from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, Prompt, PromptMessage, PromptArgument
 from mcp.server.stdio import stdio_server
 
 
@@ -226,6 +226,150 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+
+@app.list_prompts()
+async def list_prompts() -> list[Prompt]:
+    """List available prompts for RAG workflows."""
+    return [
+        Prompt(
+            name="extract-answer",
+            description="Extract the most relevant answer from retrieved document chunks",
+            arguments=[
+                PromptArgument(
+                    name="query",
+                    description="The original user query or question",
+                    required=True
+                ),
+                PromptArgument(
+                    name="chunks",
+                    description="Retrieved document chunks (JSON array with 'text', 'source', 'distance' fields)",
+                    required=True
+                )
+            ]
+        ),
+        Prompt(
+            name="summarize-documents",
+            description="Summarize information from multiple document chunks",
+            arguments=[
+                PromptArgument(
+                    name="topic",
+                    description="The topic or theme to summarize",
+                    required=True
+                ),
+                PromptArgument(
+                    name="chunks",
+                    description="Document chunks to summarize (JSON array)",
+                    required=True
+                ),
+                PromptArgument(
+                    name="max_length",
+                    description="Maximum summary length in words (default: 200)",
+                    required=False
+                )
+            ]
+        )
+    ]
+
+
+@app.get_prompt()
+async def get_prompt(name: str, arguments: dict[str, str] | None) -> PromptMessage:
+    """Generate a prompt with the given arguments."""
+
+    if name == "extract-answer":
+        query = arguments.get("query", "") if arguments else ""
+        chunks_json = arguments.get("chunks", "[]") if arguments else "[]"
+
+        try:
+            chunks = json.loads(chunks_json)
+        except json.JSONDecodeError:
+            chunks = []
+
+        # Build the prompt
+        prompt_text = f"""You are a helpful assistant with access to a vector database. A user has asked the following question:
+
+**Question:** {query}
+
+I have retrieved the most relevant document chunks from the database. Please:
+1. Carefully read through all the retrieved chunks below
+2. Extract the most relevant information that answers the question
+3. Provide a clear, concise answer based ONLY on the information in these chunks
+4. Include direct quotes from the source documents when appropriate
+5. If the chunks don't contain enough information to answer the question, say so clearly
+
+Retrieved Document Chunks:
+"""
+
+        if not chunks:
+            prompt_text += "\n(No chunks provided)\n"
+        else:
+            for i, chunk in enumerate(chunks, 1):
+                text = chunk.get('text', '')
+                source = chunk.get('source', 'unknown')
+                distance = chunk.get('distance', 0.0)
+
+                prompt_text += f"""
+---
+**Chunk {i}** (Source: {source}, Relevance Score: {distance:.4f})
+{text}
+"""
+
+        prompt_text += """
+---
+
+Now, please provide your answer based on these chunks. Remember to cite sources when making specific claims."""
+
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=prompt_text)
+        )
+
+    elif name == "summarize-documents":
+        topic = arguments.get("topic", "the documents") if arguments else "the documents"
+        chunks_json = arguments.get("chunks", "[]") if arguments else "[]"
+        max_length = arguments.get("max_length", "200") if arguments else "200"
+
+        try:
+            chunks = json.loads(chunks_json)
+        except json.JSONDecodeError:
+            chunks = []
+
+        prompt_text = f"""Please create a comprehensive summary about "{topic}" based on the following document chunks retrieved from a vector database.
+
+Requirements:
+- Maximum length: {max_length} words
+- Focus on the key points related to {topic}
+- Maintain factual accuracy
+- Cite sources when making specific claims
+
+Document Chunks:
+"""
+
+        if not chunks:
+            prompt_text += "\n(No chunks provided)\n"
+        else:
+            for i, chunk in enumerate(chunks, 1):
+                text = chunk.get('text', '')
+                source = chunk.get('source', 'unknown')
+
+                prompt_text += f"""
+---
+**Source {i}:** {source}
+{text}
+"""
+
+        prompt_text += """
+---
+
+Please provide your summary now."""
+
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=prompt_text)
+        )
+
+    else:
+        raise ValueError(f"Unknown prompt: {name}")
 
 
 async def main():
