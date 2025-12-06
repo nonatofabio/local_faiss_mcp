@@ -2,18 +2,18 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.nonatofabio/local-faiss-mcp",
   "title": "Local FAISS MCP Server",
-  "description": "A Model Context Protocol server providing local vector database functionality using FAISS for Retrieval-Augmented Generation (RAG) applications. Features include document ingestion with automatic chunking, semantic search with configurable embedding models, MCP prompts for answer extraction and summarization, and persistent local storage.",
+  "description": "Local FAISS vector database for RAG with document ingestion, semantic search, and MCP prompts.",
   "homepage": "https://github.com/nonatofabio/local_faiss_mcp",
   "repository": {
-    "type": "git",
-    "url": "https://github.com/nonatofabio/local_faiss_mcp.git"
+    "url": "https://github.com/nonatofabio/local_faiss_mcp",
+    "source": "github"
   },
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "local-faiss-mcp",
-      "version": "0.2.0-rc.1",
+      "version": "0.2.0-rc.2",
       "transport": {
         "type": "stdio"
       }
