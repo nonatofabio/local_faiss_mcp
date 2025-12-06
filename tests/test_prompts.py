@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
 """
-Test suite for MCP prompts functionality.
-Tests prompt listing and prompt generation.
+Essential test suite for MCP prompts functionality.
+Tests only critical user-facing behavior.
 """
 
 import json
 import pytest
+from local_faiss_mcp.server import list_prompts, get_prompt
 
 
 class TestPrompts:
-    """Test MCP prompt functionality."""
+    """Essential tests for MCP prompt functionality."""
 
-    def test_extract_answer_prompt_structure(self):
-        """Test that extract-answer prompt generates correct structure."""
-        # Simulate the prompt generation logic
-        query = "What is FAISS?"
+    @pytest.mark.asyncio
+    async def test_list_prompts_returns_two_prompts(self):
+        """Test that users can discover both available prompts."""
+        prompts = await list_prompts()
+
+        assert len(prompts) == 2
+
+        prompt_names = [p.name for p in prompts]
+        assert "extract-answer" in prompt_names
+        assert "summarize-documents" in prompt_names
+
+    @pytest.mark.asyncio
+    async def test_extract_answer_includes_query_and_chunks(self):
+        """Test that extract-answer prompt generates text with query and chunks."""
         chunks = [
             {
                 "text": "FAISS is a library for efficient similarity search.",
@@ -28,141 +39,80 @@ class TestPrompts:
             }
         ]
 
-        chunks_json = json.dumps(chunks)
+        message = await get_prompt("extract-answer", {
+            "query": "What is FAISS?",
+            "chunks": json.dumps(chunks)
+        })
 
-        # Verify chunks can be serialized and deserialized
-        parsed_chunks = json.loads(chunks_json)
-        assert len(parsed_chunks) == 2
-        assert parsed_chunks[0]["text"] == "FAISS is a library for efficient similarity search."
-        assert parsed_chunks[0]["source"] == "faiss_docs.txt"
+        # Verify message structure
+        assert message.role == "user"
+        assert hasattr(message.content, 'text')
 
-    def test_summarize_prompt_structure(self):
-        """Test that summarize-documents prompt generates correct structure."""
-        topic = "FAISS architecture"
+        # Verify content includes query and all chunks
+        text = message.content.text
+        assert "What is FAISS?" in text
+        assert "FAISS is a library for efficient similarity search." in text
+        assert "FAISS was developed by Facebook AI Research." in text
+        assert "faiss_docs.txt" in text
+        assert "faiss_history.txt" in text
+
+    @pytest.mark.asyncio
+    async def test_summarize_includes_topic_and_chunks(self):
+        """Test that summarize-documents prompt generates text with topic and chunks."""
         chunks = [
             {
                 "text": "FAISS uses indexing structures for fast retrieval.",
                 "source": "faiss_architecture.txt"
-            }
-        ]
-
-        chunks_json = json.dumps(chunks)
-        parsed_chunks = json.loads(chunks_json)
-
-        assert len(parsed_chunks) == 1
-        assert parsed_chunks[0]["text"] == "FAISS uses indexing structures for fast retrieval."
-
-    def test_prompt_arguments_validation(self):
-        """Test that prompt arguments are properly validated."""
-        # Test empty query
-        query = ""
-        assert query == ""  # Empty queries should be handled gracefully
-
-        # Test empty chunks
-        chunks_json = "[]"
-        parsed = json.loads(chunks_json)
-        assert parsed == []
-
-        # Test invalid JSON handling
-        invalid_json = "not valid json"
-        with pytest.raises(json.JSONDecodeError):
-            json.loads(invalid_json)
-
-    def test_multiple_chunks_formatting(self):
-        """Test that multiple chunks are formatted correctly."""
-        chunks = [
-            {"text": "First chunk", "source": "doc1.txt", "distance": 0.3},
-            {"text": "Second chunk", "source": "doc2.txt", "distance": 0.5},
-            {"text": "Third chunk", "source": "doc3.txt", "distance": 0.7}
-        ]
-
-        # Verify all chunks can be processed
-        for i, chunk in enumerate(chunks, 1):
-            assert "text" in chunk
-            assert "source" in chunk
-            assert "distance" in chunk
-            assert isinstance(chunk["distance"], float)
-
-    def test_prompt_with_special_characters(self):
-        """Test that prompts handle special characters correctly."""
-        query = "What is 'FAISS' & how does it work?"
-        chunks = [
+            },
             {
-                "text": "FAISS handles queries with special chars: <, >, &, etc.",
-                "source": "special_chars.txt",
-                "distance": 0.4
+                "text": "FAISS supports multiple distance metrics.",
+                "source": "faiss_metrics.txt"
             }
         ]
 
-        chunks_json = json.dumps(chunks)
-        parsed = json.loads(chunks_json)
+        message = await get_prompt("summarize-documents", {
+            "topic": "FAISS architecture",
+            "chunks": json.dumps(chunks),
+            "max_length": "150"
+        })
 
-        assert parsed[0]["text"] == "FAISS handles queries with special chars: <, >, &, etc."
+        # Verify message structure
+        assert message.role == "user"
+        assert hasattr(message.content, 'text')
 
-    def test_prompt_max_length_parameter(self):
-        """Test that max_length parameter is handled correctly."""
-        max_lengths = ["100", "200", "500", "1000"]
+        # Verify content includes topic and all chunks
+        text = message.content.text
+        assert "FAISS architecture" in text
+        assert "150" in text  # max_length
+        assert "FAISS uses indexing structures for fast retrieval." in text
+        assert "FAISS supports multiple distance metrics." in text
+        assert "faiss_architecture.txt" in text
+        assert "faiss_metrics.txt" in text
 
-        for length in max_lengths:
-            assert length.isdigit()
-            assert int(length) > 0
+    @pytest.mark.asyncio
+    async def test_unknown_prompt_raises_error(self):
+        """Test that requesting an unknown prompt raises an error."""
+        with pytest.raises(ValueError, match="Unknown prompt"):
+            await get_prompt("nonexistent-prompt", {
+                "query": "test"
+            })
 
-    def test_empty_chunks_handling(self):
-        """Test that empty chunks are handled gracefully."""
-        chunks_json = "[]"
-        parsed_chunks = json.loads(chunks_json)
+    @pytest.mark.asyncio
+    async def test_invalid_json_chunks_handled(self):
+        """Test that invalid JSON in chunks doesn't crash the server."""
+        # Should handle gracefully by treating as empty chunks
+        message = await get_prompt("extract-answer", {
+            "query": "What is FAISS?",
+            "chunks": "this is not valid json"
+        })
 
-        assert isinstance(parsed_chunks, list)
-        assert len(parsed_chunks) == 0
+        # Should still generate a valid message
+        assert message.role == "user"
+        assert hasattr(message.content, 'text')
 
-    def test_chunk_missing_fields(self):
-        """Test handling of chunks with missing optional fields."""
-        chunks = [
-            {"text": "Only text field"},  # Missing source and distance
-            {"text": "Has source", "source": "doc.txt"}  # Missing distance
-        ]
-
-        for chunk in chunks:
-            # Should have at least text field
-            assert "text" in chunk
-
-            # Source should default to 'unknown' if missing
-            source = chunk.get("source", "unknown")
-            assert isinstance(source, str)
-
-            # Distance should default to 0.0 if missing
-            distance = chunk.get("distance", 0.0)
-            assert isinstance(distance, (int, float))
-
-
-class TestPromptIntegration:
-    """Integration tests for prompts with actual MCP server components."""
-
-    def test_prompt_names(self):
-        """Test that prompt names follow naming conventions."""
-        prompt_names = ["extract-answer", "summarize-documents"]
-
-        for name in prompt_names:
-            # Should be lowercase
-            assert name == name.lower()
-            # Should use hyphens, not underscores
-            assert "_" not in name
-            # Should be descriptive
-            assert len(name) > 5
-
-    def test_prompt_descriptions(self):
-        """Test that prompts have meaningful descriptions."""
-        prompts = {
-            "extract-answer": "Extract the most relevant answer from retrieved document chunks",
-            "summarize-documents": "Summarize information from multiple document chunks"
-        }
-
-        for name, description in prompts.items():
-            # Should have a description
-            assert description is not None
-            assert len(description) > 10
-            # Should end with period or be a complete sentence
-            assert description[0].isupper()
+        # Should include the query even if chunks are invalid
+        text = message.content.text
+        assert "What is FAISS?" in text
 
 
 if __name__ == '__main__':
