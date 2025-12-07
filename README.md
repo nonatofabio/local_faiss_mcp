@@ -73,6 +73,7 @@ python local_faiss_mcp/server.py --index-dir /path/to/index/directory
 **Command-line Arguments:**
 - `--index-dir`: Directory to store FAISS index and metadata files (default: current directory)
 - `--embed`: Hugging Face embedding model name (default: `all-MiniLM-L6-v2`)
+- `--rerank`: Enable re-ranking with specified cross-encoder model (default: `BAAI/bge-reranker-base`)
 
 **Using a Custom Embedding Model:**
 ```bash
@@ -85,6 +86,32 @@ local-faiss-mcp --index-dir ./.vector_store --embed paraphrase-multilingual-Mini
 # Use any Hugging Face sentence-transformers model
 local-faiss-mcp --index-dir ./.vector_store --embed sentence-transformers/model-name
 ```
+
+**Using Re-ranking for Better Results:**
+
+Re-ranking uses a cross-encoder model to reorder FAISS results for improved relevance. This two-stage "retrieve and rerank" approach is common in production search systems.
+
+```bash
+# Enable re-ranking with default model (BAAI/bge-reranker-base)
+local-faiss-mcp --index-dir ./.vector_store --rerank
+
+# Use a specific re-ranking model
+local-faiss-mcp --index-dir ./.vector_store --rerank cross-encoder/ms-marco-MiniLM-L-6-v2
+
+# Combine custom embedding and re-ranking
+local-faiss-mcp --index-dir ./.vector_store --embed all-mpnet-base-v2 --rerank BAAI/bge-reranker-base
+```
+
+**How Re-ranking Works:**
+1. FAISS retrieves top candidates (10x more than requested)
+2. Cross-encoder scores each candidate against the query
+3. Results are re-sorted by relevance score
+4. Top-k most relevant results are returned
+
+Popular re-ranking models:
+- `BAAI/bge-reranker-base` - Good balance (default)
+- `cross-encoder/ms-marco-MiniLM-L-6-v2` - Fast and efficient
+- `cross-encoder/ms-marco-TinyBERT-L-2-v2` - Very fast, smaller model
 
 The server will:
 - Create the index directory if it doesn't exist
@@ -213,6 +240,41 @@ Add this server to your Claude Code MCP configuration (`.mcp.json`):
         "./.vector_store",
         "--embed",
         "all-mpnet-base-v2"
+      ]
+    }
+  }
+}
+```
+
+**With re-ranking enabled**:
+```json
+{
+  "mcpServers": {
+    "local-faiss-mcp": {
+      "command": "local-faiss-mcp",
+      "args": [
+        "--index-dir",
+        "./.vector_store",
+        "--rerank"
+      ]
+    }
+  }
+}
+```
+
+**Full configuration with embedding and re-ranking**:
+```json
+{
+  "mcpServers": {
+    "local-faiss-mcp": {
+      "command": "local-faiss-mcp",
+      "args": [
+        "--index-dir",
+        "./.vector_store",
+        "--embed",
+        "all-mpnet-base-v2",
+        "--rerank",
+        "BAAI/bge-reranker-base"
       ]
     }
   }

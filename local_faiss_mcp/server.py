@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 import faiss
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from mcp.server import Server
 from mcp.types import Tool, TextContent, Prompt, PromptMessage, PromptArgument
 from mcp.server.stdio import stdio_server
@@ -26,14 +26,21 @@ class FAISSVectorStore:
         self,
         index_path: str = "faiss.index",
         metadata_path: str = "metadata.json",
-        embedding_model_name: str = "all-MiniLM-L6-v2"
+        embedding_model_name: str = "all-MiniLM-L6-v2",
+        rerank_model_name: str | None = None
     ):
         self.index_path = index_path
         self.metadata_path = metadata_path
         self.embedding_model_name = embedding_model_name
+        self.rerank_model_name = rerank_model_name
 
         # Load the embedding model
         self.embedding_model = SentenceTransformer(embedding_model_name)
+
+        # Load the re-ranker model if specified
+        self.reranker = None
+        if rerank_model_name:
+            self.reranker = CrossEncoder(rerank_model_name)
 
         # Get dimension from the model by encoding a test string
         test_embedding = self.embedding_model.encode(["test"], convert_to_numpy=True)
@@ -121,21 +128,46 @@ class FAISSVectorStore:
         # Generate query embedding
         query_embedding = self.embedding_model.encode([query_text], convert_to_numpy=True)
 
+        # If re-ranker is enabled, retrieve more candidates for re-ranking
+        if self.reranker:
+            # Retrieve 10x more candidates for re-ranking
+            candidate_k = min(top_k * 10, self.index.ntotal)
+        else:
+            candidate_k = min(top_k, self.index.ntotal)
+
         # Search FAISS index
-        distances, indices = self.index.search(query_embedding.astype('float32'), min(top_k, self.index.ntotal))
+        distances, indices = self.index.search(query_embedding.astype('float32'), candidate_k)
 
         # Retrieve matching documents
-        results = []
+        candidates = []
         for dist, idx in zip(distances[0], indices[0]):
             if idx < len(self.metadata["documents"]):
                 doc = self.metadata["documents"][idx]
-                results.append({
+                candidates.append({
                     "text": doc["text"],
                     "source": doc["source"],
                     "distance": float(dist)
                 })
 
-        return results
+        # Apply re-ranking if enabled
+        if self.reranker and candidates:
+            # Create (query, document) pairs for re-ranker
+            pairs = [(query_text, candidate["text"]) for candidate in candidates]
+
+            # Get re-ranker scores
+            rerank_scores = self.reranker.predict(pairs)
+
+            # Add rerank scores to candidates and sort by score (descending)
+            for candidate, score in zip(candidates, rerank_scores):
+                candidate["rerank_score"] = float(score)
+
+            # Sort by rerank score (higher is better)
+            candidates.sort(key=lambda x: x["rerank_score"], reverse=True)
+
+            # Return top-k re-ranked results
+            return candidates[:top_k]
+
+        return candidates
 
 
 # Initialize the MCP server
@@ -220,6 +252,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             for i, result in enumerate(results, 1):
                 message += f"{i}. Source: {result['source']}\n"
                 message += f"   Distance: {result['distance']:.4f}\n"
+                if 'rerank_score' in result:
+                    message += f"   Rerank Score: {result['rerank_score']:.4f}\n"
                 message += f"   Text: {result['text'][:200]}...\n\n"
 
         return [TextContent(type="text", text=message)]
@@ -390,6 +424,14 @@ async def main():
         default="all-MiniLM-L6-v2",
         help="Hugging Face embedding model name (default: all-MiniLM-L6-v2)"
     )
+    parser.add_argument(
+        "--rerank",
+        type=str,
+        nargs="?",
+        const="BAAI/bge-reranker-base",
+        default=None,
+        help="Enable re-ranking with specified model (default: BAAI/bge-reranker-base if flag provided without model)"
+    )
     args = parser.parse_args()
 
     # Initialize vector store with configured paths and embedding model
@@ -398,14 +440,19 @@ async def main():
     metadata_path = index_dir / "metadata.json"
 
     print(f"Initializing with embedding model: {args.embed}", file=sys.stderr)
+    if args.rerank:
+        print(f"Re-ranking enabled with model: {args.rerank}", file=sys.stderr)
 
     vector_store = FAISSVectorStore(
         index_path=str(index_path),
         metadata_path=str(metadata_path),
-        embedding_model_name=args.embed
+        embedding_model_name=args.embed,
+        rerank_model_name=args.rerank
     )
 
     print(f"Vector store initialized (dimension: {vector_store.dimension})", file=sys.stderr)
+    if vector_store.reranker:
+        print(f"Re-ranker loaded successfully", file=sys.stderr)
 
     async with stdio_server() as (read_stream, write_stream):
         await app.run(
