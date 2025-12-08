@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://github.com/nonatofabio/local_faiss_mcp/workflows/Tests/badge.svg)](https://github.com/nonatofabio/local_faiss_mcp/actions)
-<!-- [![PyPI version](https://badge.fury.io/py/local-faiss-mcp.svg)](https://badge.fury.io/py/local-faiss-mcp) -->
+[![PyPI version](https://badge.fury.io/py/local-faiss-mcp.svg)](https://badge.fury.io/py/local-faiss-mcp)
 
 A Model Context Protocol (MCP) server that provides local vector database functionality using FAISS for Retrieval-Augmented Generation (RAG) applications.
 
@@ -13,11 +13,19 @@ A Model Context Protocol (MCP) server that provides local vector database functi
 
 ## Features
 
+### Core Capabilities
 - **Local Vector Storage**: Uses FAISS for efficient similarity search without external dependencies
 - **Document Ingestion**: Automatically chunks and embeds documents for storage
 - **Semantic Search**: Query documents using natural language with sentence embeddings
 - **Persistent Storage**: Indexes and metadata are saved to disk
 - **MCP Compatible**: Works with any MCP-compatible AI agent or client
+
+### v0.2.0 Highlights
+- **CLI Tool**: `local-faiss` command for standalone indexing and search
+- **Document Formats**: Native PDF/TXT/MD support, DOCX/HTML/EPUB with pandoc
+- **Re-ranking**: Two-stage retrieve and rerank for better results
+- **Custom Embeddings**: Choose any Hugging Face embedding model
+- **MCP Prompts**: Built-in prompts for answer extraction and summarization
 
 ## Quickstart
 
@@ -43,11 +51,29 @@ Claude will retrieve relevant document chunks from your vector store and use the
 
 ## Installation
 
+⚡️ **Upgrading?** Run `pip install --upgrade local-faiss-mcp`
+
 ### From PyPI (Recommended)
 
 ```bash
 pip install local-faiss-mcp
 ```
+
+### Optional: Extended Format Support
+
+For DOCX, HTML, EPUB, and 40+ additional formats, install pandoc:
+
+```bash
+# macOS
+brew install pandoc
+
+# Linux
+sudo apt install pandoc
+
+# Or download from: https://pandoc.org/installing.html
+```
+
+**Note**: PDF, TXT, and MD work without pandoc.
 
 ### From Source
 
