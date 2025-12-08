@@ -8,12 +8,12 @@
     "url": "https://github.com/nonatofabio/local_faiss_mcp",
     "source": "github"
   },
-  "version": "0.2.0-rc.3",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "local-faiss-mcp",
-      "version": "0.2.0-rc.3",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       }

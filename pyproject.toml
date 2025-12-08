@@ -1,6 +1,6 @@
 [project]
 name = "local-faiss-mcp"
-version = "0.2.0-rc.3"
+version = "0.2.0"
 description = "MCP server with FAISS local vector database for RAG"
 readme = "README.md"
 requires-python = ">=3.10"
