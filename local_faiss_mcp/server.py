@@ -17,6 +17,7 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from mcp.server import Server
 from mcp.types import Tool, TextContent, Prompt, PromptMessage, PromptArgument
 from mcp.server.stdio import stdio_server
+from .document_parser import parse_document, is_file_path
 
 
 class FAISSVectorStore:
@@ -227,6 +228,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     if name == "ingest_document":
         document = arguments.get("document")
         source = arguments.get("source", "unknown")
+
+        # Auto-detect if document is a file path
+        if is_file_path(document):
+            try:
+                file_path = Path(document)
+                # Parse the document file
+                document_text = parse_document(file_path)
+                # Use filename as source if not specified
+                if source == "unknown":
+                    source = file_path.name
+                document = document_text
+            except Exception as e:
+                return [TextContent(type="text", text=f"Failed to parse document: {str(e)}")]
 
         result = vector_store.ingest(document, source)
 

@@ -25,6 +25,7 @@ dependencies = [
     "faiss-cpu>=1.8.0",
     "sentence-transformers>=2.2.0",
     "numpy>=1.24.0",
+    "pypdf>=4.0.0",
 ]
 
 [project.urls]
@@ -34,6 +35,7 @@ Issues = "https://github.com/nonatofabio/local_faiss_mcp/issues"
 
 [project.scripts]
 local-faiss-mcp = "local_faiss_mcp.server:cli_main"
+local-faiss = "local_faiss_mcp.cli:main"
 
 [project.optional-dependencies]
 dev = [

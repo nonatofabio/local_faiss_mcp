@@ -22,13 +22,21 @@ A Model Context Protocol (MCP) server that provides local vector database functi
 ## Quickstart
 
 ```bash
+# Install
 pip install local-faiss-mcp
+
+# Index documents
+local-faiss index document.pdf
+
+# Search
+local-faiss search "What is this document about?"
 ```
 
-Then configure your MCP client (see [Configuration](#configuration-with-mcp-clients)) and try your first query in Claude:
+Or use with Claude Code - configure MCP client (see [Configuration](#configuration-with-mcp-clients)) and try:
 
 ```
-Use the query_rag_store tool to search for: "How does FAISS perform similarity search?"
+Use the ingest_document tool with: ./path/to/document.pdf
+Then use query_rag_store to search for: "How does FAISS perform similarity search?"
 ```
 
 Claude will retrieve relevant document chunks from your vector store and use them to answer your question.
@@ -128,14 +136,26 @@ The server provides two tools for document management:
 Ingest a document into the vector store.
 
 **Parameters:**
-- `document` (required): The text content to ingest
+- `document` (required): Text content OR file path to ingest
 - `source` (optional): Identifier for the document source (default: "unknown")
 
-**Example:**
+**Auto-detection**: If `document` looks like a file path, it will be automatically parsed.
+
+**Supported formats:**
+- Native: TXT, MD, PDF
+- With pandoc: DOCX, ODT, HTML, RTF, EPUB, and 40+ formats
+
+**Examples:**
 ```json
 {
   "document": "FAISS is a library for efficient similarity search...",
   "source": "faiss_docs.txt"
+}
+```
+
+```json
+{
+  "document": "./documents/research_paper.pdf"
 }
 ```
 
@@ -196,6 +216,69 @@ Use the extract-answer prompt with:
 ```
 
 The prompts will guide the LLM to provide structured, citation-backed answers based on your vector store data.
+
+## Command-Line Interface
+
+The `local-faiss` CLI provides standalone document indexing and search capabilities.
+
+### Index Command
+
+Index documents from the command line:
+
+```bash
+# Index single file
+local-faiss index document.pdf
+
+# Index multiple files
+local-faiss index doc1.pdf doc2.txt doc3.md
+
+# Index all files in folder
+local-faiss index documents/
+
+# Index recursively
+local-faiss index -r documents/
+
+# Index with glob pattern
+local-faiss index "docs/**/*.pdf"
+```
+
+**Configuration**: The CLI automatically uses MCP configuration from:
+1. `./.mcp.json` (local/project-specific)
+2. `~/.claude/.mcp.json` (Claude Code config)
+3. `~/.mcp.json` (fallback)
+
+If no config exists, creates `./.mcp.json` with default settings (`./.vector_store`).
+
+**Supported formats:**
+- **Native**: TXT, MD, PDF (always available)
+- **With pandoc**: DOCX, ODT, HTML, RTF, EPUB, etc.
+  - Install: `brew install pandoc` (macOS) or `apt install pandoc` (Linux)
+
+### Search Command
+
+Search the indexed documents:
+
+```bash
+# Basic search
+local-faiss search "What is FAISS?"
+
+# Get more results
+local-faiss search -k 5 "similarity search algorithms"
+```
+
+Results show:
+- Source file path
+- FAISS distance score
+- Re-rank score (if enabled in MCP config)
+- Text preview (first 300 characters)
+
+### CLI Features
+
+- ✅ **Incremental indexing**: Adds to existing index, doesn't overwrite
+- ✅ **Progress output**: Shows indexing progress for each file
+- ✅ **Shared config**: Uses same settings as MCP server
+- ✅ **Auto-detection**: Supports glob patterns and recursive folders
+- ✅ **Format support**: Handles PDF, TXT, MD natively; DOCX+ with pandoc
 
 ## Configuration with MCP Clients
 
