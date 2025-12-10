@@ -131,20 +131,24 @@ class TestColorizeFunction:
     def test_colorize_with_icon(self):
         """Test colorizing text with an icon."""
         with patch('local_faiss_mcp.colors.COLORAMA_AVAILABLE', True):
-            with patch.dict(os.environ, {}, clear=True):
-                with patch('sys.stdout.isatty', return_value=True):
-                    msg = _colorize("Test", "\x1b[32m", "✅")
-                    assert "Test" in msg
-                    assert "✅" in msg
+            with patch('local_faiss_mcp.colors.Style') as mock_style:
+                mock_style.RESET_ALL = '\x1b[0m'
+                with patch.dict(os.environ, {}, clear=True):
+                    with patch('sys.stdout.isatty', return_value=True):
+                        msg = _colorize("Test", "\x1b[32m", "✅")
+                        assert "Test" in msg
+                        assert "✅" in msg
     
     def test_colorize_without_icon(self):
         """Test colorizing text without an icon."""
         with patch('local_faiss_mcp.colors.COLORAMA_AVAILABLE', True):
-            with patch.dict(os.environ, {}, clear=True):
-                with patch('sys.stdout.isatty', return_value=True):
-                    msg = _colorize("Test", "\x1b[32m", "")
-                    assert "Test" in msg
-                    assert "✅" not in msg
+            with patch('local_faiss_mcp.colors.Style') as mock_style:
+                mock_style.RESET_ALL = '\x1b[0m'
+                with patch.dict(os.environ, {}, clear=True):
+                    with patch('sys.stdout.isatty', return_value=True):
+                        msg = _colorize("Test", "\x1b[32m", "")
+                        assert "Test" in msg
+                        assert "✅" not in msg
     
     def test_colorize_when_disabled(self):
         """Test colorizing when colors are disabled."""
