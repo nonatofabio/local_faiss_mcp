@@ -26,6 +26,7 @@ dependencies = [
     "sentence-transformers>=2.2.0",
     "numpy>=1.24.0",
     "pypdf>=4.0.0",
+    "colorama>=0.4.6",
 ]
 
 [project.urls]
@@ -52,3 +53,8 @@ include = ["local_faiss_mcp*"]
 [build-system]
 requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

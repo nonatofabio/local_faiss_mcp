@@ -17,6 +17,7 @@ from typing import List, Optional, Dict, Any
 
 from .server import FAISSVectorStore
 from .document_parser import parse_document
+from .colors import success, error, info, warning
 
 
 def find_mcp_config() -> Optional[Path]:
@@ -57,7 +58,7 @@ def read_mcp_config(config_path: Path) -> Dict[str, Any]:
         with open(config_path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Warning: Failed to read MCP config: {e}", file=sys.stderr)
+        print(warning(f"Failed to read MCP config: {e}"), file=sys.stderr)
         return {}
 
 
@@ -71,7 +72,7 @@ def get_faiss_config() -> Dict[str, Any]:
     config_path = find_mcp_config()
 
     if config_path:
-        print(f"Using MCP config: {config_path}", file=sys.stderr)
+        print(info(f"Using MCP config: {config_path}"), file=sys.stderr)
         mcp_config = read_mcp_config(config_path)
 
         # Extract local-faiss-mcp server config
@@ -136,7 +137,7 @@ def create_default_config() -> Dict[str, Any]:
 
     # Only create if it doesn't exist
     if not config_path.exists():
-        print(f"Creating default MCP config: {config_path}", file=sys.stderr)
+        print(info(f"Creating default MCP config: {config_path}"), file=sys.stderr)
         with open(config_path, 'w') as f:
             json.dump(default_config, f, indent=2)
 
@@ -185,7 +186,7 @@ def collect_files(patterns: List[str], recursive: bool = False) -> List[Path]:
             files.append(path)
 
         else:
-            print(f"Warning: Path not found: {pattern}", file=sys.stderr)
+            print(warning(f"Path not found: {pattern}"), file=sys.stderr)
 
     # Remove duplicates and sort
     unique_files = sorted(set(files))
@@ -201,7 +202,7 @@ def cmd_index(args):
     files = collect_files(args.files, recursive=args.recursive)
 
     if not files:
-        print("Error: No files found to index", file=sys.stderr)
+        print(error("No files found to index"), file=sys.stderr)
         return 1
 
     print(f"\nIndexing {len(files)} file(s)...\n")
@@ -214,9 +215,9 @@ def cmd_index(args):
 
     # Check if index already exists
     if index_path.exists():
-        print(f"Adding to existing index at: {index_dir}")
+        print(info(f"Adding to existing index at: {index_dir}"))
     else:
-        print(f"Creating new index at: {index_dir}")
+        print(info(f"Creating new index at: {index_dir}"))
 
     vector_store = FAISSVectorStore(
         index_path=str(index_path),
@@ -239,22 +240,28 @@ def cmd_index(args):
             result = vector_store.ingest(document_text, source=str(file_path))
 
             if result["success"]:
-                print(f"   ✓ Added {result['chunks_added']} chunks")
+                chunks_added = result["chunks_added"]
+                print(f"   {success(f'Added {chunks_added} chunks')}")
                 success_count += 1
             else:
-                print(f"   ✗ Failed: {result.get('error', 'Unknown error')}")
+                err_msg = result.get("error", "Unknown error")
+                print(f"   {error(f'Failed: {err_msg}')}")
                 fail_count += 1
 
         except Exception as e:
-            print(f"   ✗ Error: {str(e)}")
+            err_str = str(e)
+            print(f"   {error(f'Error: {err_str}')}")
             fail_count += 1
 
     print(f"\n{'='*60}")
-    print(f"Indexing complete!")
-    print(f"  Success: {success_count} file(s)")
-    print(f"  Failed: {fail_count} file(s)")
-    print(f"  Total documents in store: {len(vector_store.metadata['documents'])}")
-    print(f"  Index location: {index_dir}")
+    print("Indexing complete!")
+    if success_count > 0:
+        print(f"  {success(f'Success: {success_count} file(s)')}")   
+    if fail_count > 0:
+        print(f"  {error(f'Failed: {fail_count} file(s)')}")    
+    total_docs = len(vector_store.metadata['documents'])
+    print(info(f"Total documents in store: {total_docs}"))
+    print(info(f"Index location: {index_dir}"))
     print(f"{'='*60}")
 
     return 0 if fail_count == 0 else 1
@@ -271,8 +278,8 @@ def cmd_search(args):
     metadata_path = index_dir / "metadata.json"
 
     if not index_path.exists():
-        print(f"Error: No index found at {index_dir}", file=sys.stderr)
-        print("Run 'local-faiss index <files>' first to create an index", file=sys.stderr)
+        print(error(f"No index found at {index_dir}"), file=sys.stderr)
+        print(info("Run 'local-faiss index <files>' first to create an index"), file=sys.stderr)
         return 1
 
     vector_store = FAISSVectorStore(
@@ -286,7 +293,7 @@ def cmd_search(args):
     results = vector_store.query(args.query, top_k=args.top_k)
 
     if not results:
-        print("No results found.")
+        print(info("No results found."))
         return 0
 
     print(f"\nFound {len(results)} relevant chunk(s):\n")

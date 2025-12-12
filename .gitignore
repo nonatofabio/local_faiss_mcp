@@ -48,3 +48,6 @@ Thumbs.db
 #MCP
 MCP_REGISTRY.md
 .mcpregistry_*_token
+
+# uv lock file
+uv.lock
