@@ -14,10 +14,10 @@ import argparse
 from pathlib import Path
 from glob import glob as glob_files
 from typing import List, Optional, Dict, Any
-
 from .server import FAISSVectorStore
 from .document_parser import parse_document
 from .colors import success, error, info, warning
+from .progress import create_file_progress, update_progress_description, progress_print
 
 
 def find_mcp_config() -> Optional[Path]:
@@ -205,7 +205,11 @@ def cmd_index(args):
         print(error("No files found to index"), file=sys.stderr)
         return 1
 
-    print(f"\nIndexing {len(files)} file(s)...\n")
+    # Print appropriate header based on file count
+    if len(files) > 1:
+        print(f"\nIndexing {len(files)} files...\n")
+    else:
+        print(f"\nIndexing {len(files)} file(s)...\n")
 
     # Initialize vector store
     index_dir = Path(config['index_dir']).resolve()
@@ -229,9 +233,14 @@ def cmd_index(args):
     success_count = 0
     fail_count = 0
 
-    for file_path in files:
+    # Create progress bar wrapper for files
+    files_iter, show_progress = create_file_progress(files, desc="Indexing")
+
+    for file_path in files_iter:
         try:
-            print(f"📄 Indexing: {file_path}")
+            # Update progress bar with current filename
+            update_progress_description(files_iter, file_path, "Indexing")
+            progress_print(f"📄 Indexing: {file_path}", show_progress)
 
             # Parse document
             document_text = parse_document(file_path)
@@ -241,16 +250,16 @@ def cmd_index(args):
 
             if result["success"]:
                 chunks_added = result["chunks_added"]
-                print(f"   {success(f'Added {chunks_added} chunks')}")
+                progress_print(f"   {success(f'Added {chunks_added} chunks')}", show_progress)
                 success_count += 1
             else:
                 err_msg = result.get("error", "Unknown error")
-                print(f"   {error(f'Failed: {err_msg}')}")
+                progress_print(f"   {error(f'Failed: {err_msg}')}", show_progress)
                 fail_count += 1
 
         except Exception as e:
             err_str = str(e)
-            print(f"   {error(f'Error: {err_str}')}")
+            progress_print(f"   {error(f'Error: {err_str}')}", show_progress)
             fail_count += 1
 
     print(f"\n{'='*60}")
