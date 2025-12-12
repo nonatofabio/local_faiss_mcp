@@ -12,6 +12,7 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+from datetime import datetime
 import faiss
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from mcp.server import Server
@@ -105,11 +106,13 @@ class FAISSVectorStore:
 
         # Store metadata
         start_idx = len(self.metadata["documents"])
+        indexed_at = datetime.now().isoformat()
         for i, chunk in enumerate(chunks):
             self.metadata["documents"].append({
                 "id": start_idx + i,
                 "source": source,
-                "text": chunk
+                "text": chunk,
+                "indexed_at": indexed_at
             })
 
         # Save to disk

@@ -5,6 +5,7 @@ Command-line interface for local-faiss.
 Commands:
 - index: Index documents into FAISS vector store
 - search: Search the vector store
+- list: List all indexed documents
 """
 
 import sys
@@ -14,10 +15,11 @@ import argparse
 from pathlib import Path
 from glob import glob as glob_files
 from typing import List, Optional, Dict, Any
-
+from collections import defaultdict
 from .server import FAISSVectorStore
 from .document_parser import parse_document
 from .colors import success, error, info, warning
+from .progress import create_file_progress, update_progress_description, progress_print
 
 
 def find_mcp_config() -> Optional[Path]:
@@ -205,7 +207,11 @@ def cmd_index(args):
         print(error("No files found to index"), file=sys.stderr)
         return 1
 
-    print(f"\nIndexing {len(files)} file(s)...\n")
+    # Print appropriate header based on file count
+    if len(files) > 1:
+        print(f"\nIndexing {len(files)} files...\n")
+    else:
+        print(f"\nIndexing {len(files)} file(s)...\n")
 
     # Initialize vector store
     index_dir = Path(config['index_dir']).resolve()
@@ -229,9 +235,14 @@ def cmd_index(args):
     success_count = 0
     fail_count = 0
 
-    for file_path in files:
+    # Create progress bar wrapper for files
+    files_iter, show_progress = create_file_progress(files, desc="Indexing")
+
+    for file_path in files_iter:
         try:
-            print(f"📄 Indexing: {file_path}")
+            # Update progress bar with current filename
+            update_progress_description(files_iter, file_path, "Indexing")
+            progress_print(f"📄 Indexing: {file_path}", show_progress)
 
             # Parse document
             document_text = parse_document(file_path)
@@ -241,16 +252,16 @@ def cmd_index(args):
 
             if result["success"]:
                 chunks_added = result["chunks_added"]
-                print(f"   {success(f'Added {chunks_added} chunks')}")
+                progress_print(f"   {success(f'Added {chunks_added} chunks')}", show_progress)
                 success_count += 1
             else:
                 err_msg = result.get("error", "Unknown error")
-                print(f"   {error(f'Failed: {err_msg}')}")
+                progress_print(f"   {error(f'Failed: {err_msg}')}", show_progress)
                 fail_count += 1
 
         except Exception as e:
             err_str = str(e)
-            print(f"   {error(f'Error: {err_str}')}")
+            progress_print(f"   {error(f'Error: {err_str}')}", show_progress)
             fail_count += 1
 
     print(f"\n{'='*60}")
@@ -306,6 +317,96 @@ def cmd_search(args):
             print(f"   Rerank Score: {result['rerank_score']:.4f}")
         print(f"\n   {result['text'][:300]}...")
         print("-"*60)
+
+    return 0
+
+
+def cmd_list(args):
+    """List all indexed documents in the vector store."""
+    # Get configuration
+    config = get_faiss_config()
+
+    # Build metadata path
+    index_dir = Path(config['index_dir']).resolve()
+    metadata_path = index_dir / "metadata.json"
+
+    # Check if metadata exists
+    if not metadata_path.exists():
+        if args.json:
+            print(json.dumps({"documents": [], "total": 0}))
+        else:
+            print(info("No documents indexed yet."))
+            print(info("Run 'local-faiss index <files>' to index documents."))
+        return 0
+
+    # Load metadata
+    try:
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+    except Exception as e:
+        print(error(f"Failed to read metadata: {e}"), file=sys.stderr)
+        return 1
+
+    documents = metadata.get('documents', [])
+
+    if not documents:
+        if args.json:
+            print(json.dumps({"documents": [], "total": 0}))
+        else:
+            print(info("No documents indexed yet."))
+            print(info("Run 'local-faiss index <files>' to index documents."))
+        return 0
+
+    # Group by source and count chunks, track indexed dates
+    source_chunks = defaultdict(int)
+    source_dates = {}
+    for doc in documents:
+        source = doc.get('source', 'unknown')
+        source_chunks[source] += 1
+        # Keep the most recent indexed_at date for each source
+        indexed_at = doc.get('indexed_at')
+        if indexed_at and (source not in source_dates or indexed_at > source_dates[source]):
+            source_dates[source] = indexed_at
+
+    # Sort sources alphabetically
+    sorted_sources = sorted(source_chunks.keys())
+
+    if args.json:
+        # JSON output
+        output = {
+            "documents": [
+                {
+                    "source": source,
+                    "chunks": source_chunks[source],
+                    "indexed_at": source_dates.get(source)
+                }
+                for source in sorted_sources
+            ],
+            "total": len(sorted_sources)
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        # Human-readable output
+        print(f"\nIndexed Documents ({len(sorted_sources)} total):\n")
+        print("="*60)
+
+        for i, source in enumerate(sorted_sources, 1):
+            chunk_count = source_chunks[source]
+            indexed_at = source_dates.get(source)
+            print(f"\n{i}. {source}")
+            print(f"   Chunks: {chunk_count}")
+            if indexed_at:
+                # Format the ISO date more readably
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(indexed_at)
+                    formatted_date = dt.strftime("%Y-%m-%d %H:%M")
+                    print(f"   Indexed: {formatted_date}")
+                except (ValueError, TypeError):
+                    print(f"   Indexed: {indexed_at}")
+
+        print("\n" + "="*60)
+        print(info(f"Index location: {index_dir}"))
 
     return 0
 
@@ -377,6 +478,14 @@ Examples:
         help='Number of results to return (default: 3)'
     )
 
+    # List command
+    list_parser = subparsers.add_parser('list', help='List all indexed documents')
+    list_parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Output in JSON format for machine-readable output'
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -387,6 +496,8 @@ Examples:
         return cmd_index(args)
     elif args.command == 'search':
         return cmd_search(args)
+    elif args.command == 'list':
+        return cmd_list(args)
     else:
         parser.print_help()
         return 1
@@ -394,3 +505,4 @@ Examples:
 
 if __name__ == '__main__':
     sys.exit(main())
+
