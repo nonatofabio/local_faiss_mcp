@@ -15,6 +15,7 @@ import argparse
 from pathlib import Path
 from glob import glob as glob_files
 from typing import List, Optional, Dict, Any
+from collections import defaultdict
 from .server import FAISSVectorStore
 from .document_parser import parse_document
 from .colors import success, error, info, warning
