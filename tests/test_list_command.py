@@ -235,12 +235,135 @@ class TestListWithIndexedDate:
         }
         metadata_path = temp_index_dir / "metadata.json"
         metadata_path.write_text(json.dumps(metadata))
-        
+
         args = MockArgs(json_output=False)
         result = cmd_list(args)
-        
+
         assert result == 0
         captured = capsys.readouterr()
         assert "test.pdf" in captured.out
         assert "Indexed:" not in captured.out  # Should not show "Indexed:" line
+
+    def test_list_keeps_most_recent_indexed_at(self, mock_config, temp_index_dir, capsys):
+        """Test that when a source has multiple chunks with different timestamps, the most recent is kept."""
+        metadata = {
+            "documents": [
+                {"id": 0, "source": "test.pdf", "text": "chunk 1", "indexed_at": "2024-12-08T10:00:00"},
+                {"id": 1, "source": "test.pdf", "text": "chunk 2", "indexed_at": "2024-12-08T15:30:00"},  # Most recent
+                {"id": 2, "source": "test.pdf", "text": "chunk 3", "indexed_at": "2024-12-08T12:00:00"}
+            ],
+            "model": "test"
+        }
+        metadata_path = temp_index_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata))
+
+        args = MockArgs(json_output=False)
+        result = cmd_list(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        # Should show the most recent timestamp (15:30), not the first or middle one
+        assert "Indexed: 2024-12-08 15:30" in captured.out
+        assert "Chunks: 3" in captured.out
+
+    def test_list_keeps_most_recent_indexed_at_json(self, mock_config, temp_index_dir, capsys):
+        """Test that JSON output includes the most recent indexed_at."""
+        metadata = {
+            "documents": [
+                {"id": 0, "source": "test.pdf", "text": "chunk 1", "indexed_at": "2024-12-08T10:00:00"},
+                {"id": 1, "source": "test.pdf", "text": "chunk 2", "indexed_at": "2024-12-08T15:30:00"},
+                {"id": 2, "source": "test.pdf", "text": "chunk 3", "indexed_at": "2024-12-08T12:00:00"}
+            ],
+            "model": "test"
+        }
+        metadata_path = temp_index_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata))
+
+        args = MockArgs(json_output=True)
+        result = cmd_list(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+
+        assert output["documents"][0]["indexed_at"] == "2024-12-08T15:30:00"
+
+    def test_list_invalid_date_format_fallback(self, mock_config, temp_index_dir, capsys):
+        """Test that invalid date formats are handled gracefully."""
+        metadata = {
+            "documents": [
+                {"id": 0, "source": "test.pdf", "text": "chunk 1", "indexed_at": "not-a-valid-date"}
+            ],
+            "model": "test"
+        }
+        metadata_path = temp_index_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata))
+
+        args = MockArgs(json_output=False)
+        result = cmd_list(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        # Should show raw value when parsing fails
+        assert "Indexed: not-a-valid-date" in captured.out
+
+
+class TestListEdgeCases:
+    """Tests for edge cases and error handling."""
+
+    def test_list_missing_source_fallback(self, mock_config, temp_index_dir, capsys):
+        """Test that documents without 'source' field default to 'unknown'."""
+        metadata = {
+            "documents": [
+                {"id": 0, "text": "chunk 1"},  # No source field
+                {"id": 1, "text": "chunk 2"}
+            ],
+            "model": "test"
+        }
+        metadata_path = temp_index_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata))
+
+        args = MockArgs(json_output=False)
+        result = cmd_list(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "unknown" in captured.out
+        assert "Chunks: 2" in captured.out
+
+    def test_list_missing_source_fallback_json(self, mock_config, temp_index_dir, capsys):
+        """Test that JSON output handles missing source field."""
+        metadata = {
+            "documents": [
+                {"id": 0, "text": "chunk 1"},  # No source field
+                {"id": 1, "text": "chunk 2"}
+            ],
+            "model": "test"
+        }
+        metadata_path = temp_index_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata))
+
+        args = MockArgs(json_output=True)
+        result = cmd_list(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+
+        assert output["documents"][0]["source"] == "unknown"
+        assert output["documents"][0]["chunks"] == 2
+
+    def test_list_malformed_metadata_json(self, mock_config, temp_index_dir, capsys):
+        """Test that malformed JSON is handled gracefully."""
+        metadata_path = temp_index_dir / "metadata.json"
+        # Write invalid JSON
+        metadata_path.write_text("{invalid json content")
+
+        args = MockArgs(json_output=False)
+        result = cmd_list(args)
+
+        # Should return error code
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Failed to read metadata" in captured.err
 
