@@ -125,18 +125,34 @@ def is_file_path(text: str) -> bool:
     if not text:
         return False
 
-    # Check for path-like characteristics
-    path = Path(text)
+    # Reject unreasonably long strings immediately to avoid OS errors
+    # Most file systems have path length limits (typically 4096 on Unix, 260 on Windows)
+    # We use 2000 as a safe limit that's well below common system limits
+    # but still accommodates long legitimate paths
+    if len(text) > 2000:
+        return False
 
-    # If it exists as a file, it's definitely a path
-    if path.exists() and path.is_file():
-        return True
+    # Check for path-like characteristics
+    try:
+        path = Path(text)
+
+        # If it exists as a file, it's definitely a path
+        # Wrap in try-except to catch OSError for paths that are too long
+        if path.exists() and path.is_file():
+            return True
+    except (OSError, ValueError):
+        # OSError: Path too long or other filesystem errors
+        # ValueError: Invalid path characters
+        return False
 
     # Check for path separators and reasonable length
     # (most documents are multi-sentence, paths are shorter)
     if ('/' in text or '\\' in text) and len(text) < 500:
         # Check if it has a file extension
-        if path.suffix:
-            return True
+        try:
+            if path.suffix:
+                return True
+        except (OSError, ValueError):
+            return False
 
     return False

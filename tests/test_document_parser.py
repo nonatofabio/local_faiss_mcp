@@ -59,6 +59,35 @@ class TestDocumentParser:
         assert is_file_path("document.pdf") == False  # No separator, doesn't exist
         assert is_file_path("") == False
 
+    def test_is_file_path_handles_very_long_text(self):
+        """Test that is_file_path doesn't crash on very long text (regression test for 'file name too long' bug)."""
+        # Simulate what happens when LLM passes a long document with path separators
+        long_text = """
+        This is a very long document that contains forward slashes / and might
+        have URLs like https://example.com/very/long/path/to/something.
+        """ * 1000  # Make it very long (>50,000 characters)
+
+        # Should not crash with OSError, should return False
+        result = is_file_path(long_text)
+        assert result == False
+
+        # Also test with backslashes (Windows-style paths)
+        long_text_windows = "Some text with backslashes\\path\\to\\file " * 1000
+        result = is_file_path(long_text_windows)
+        assert result == False
+
+    def test_is_file_path_length_limits(self):
+        """Test that is_file_path respects reasonable path length limits."""
+        # Paths over 2000 characters should be rejected immediately
+        very_long_path = "a/" * 2000  # Creates a path > 2000 characters
+        assert is_file_path(very_long_path) == False
+
+        # Reasonable path under 500 chars should still work (if it has proper structure)
+        reasonable_path = "/some/deeply/nested/" + "dir/" * 30 + "file.txt"
+        # This path is ~160 characters, well under 500, should be detected
+        assert len(reasonable_path) < 500
+        assert is_file_path(reasonable_path) == True
+
     def test_parse_document_file_not_found(self):
         """Test that parsing non-existent file raises error."""
         with pytest.raises(FileNotFoundError):
