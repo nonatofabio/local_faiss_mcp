@@ -220,6 +220,56 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["query"]
             }
+        ),
+        Tool(
+            name="remember",
+            description=(
+                "Store important information in long-term memory. "
+                "Use this AFTER completing a task to persist: decisions made, bugs fixed, "
+                "architectural choices, user preferences, error resolutions, and lessons learned. "
+                "Include a descriptive source tag for future retrieval. "
+                "This ensures continuity across sessions — the agent can recall this information later."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document": {
+                        "type": "string",
+                        "description": "The information to remember (concise summary of what was done and why)"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "A descriptive tag for this memory (e.g., 'bug-fix:auth-timeout', 'decision:use-postgres', 'preference:python-style')",
+                        "default": "memory"
+                    }
+                },
+                "required": ["document"]
+            }
+        ),
+        Tool(
+            name="recall",
+            description=(
+                "Search long-term memory for relevant past context. "
+                "Use this BEFORE starting a new task to check for: previous attempts, known solutions, "
+                "user preferences, architectural decisions, and past errors. "
+                "This avoids repeating mistakes and ensures consistency with prior work. "
+                "Query with natural language — the search is semantic, not keyword-based."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for in memory (natural language query)"
+                    },
+                    "top_k": {
+                        "type": "number",
+                        "description": "Number of relevant memories to retrieve",
+                        "default": 3
+                    }
+                },
+                "required": ["query"]
+            }
         )
     ]
 
@@ -228,9 +278,9 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     """Handle tool calls."""
 
-    if name == "ingest_document":
+    if name in ("ingest_document", "remember"):
         document = arguments.get("document")
-        source = arguments.get("source", "unknown")
+        source = arguments.get("source", "memory" if name == "remember" else "unknown")
 
         # Auto-detect if document is a file path
         if is_file_path(document):
@@ -256,7 +306,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
         return [TextContent(type="text", text=message)]
 
-    elif name == "query_rag_store":
+    elif name in ("query_rag_store", "recall"):
         query = arguments.get("query")
         top_k = arguments.get("top_k", 3)
 
@@ -300,6 +350,14 @@ async def list_prompts() -> list[Prompt]:
             ]
         ),
         Prompt(
+            name="memory-protocol",
+            description=(
+                "Behavioral protocol for using long-term memory. "
+                "Apply this at the start of a session to enable the Memory First and Auto-Archive patterns."
+            ),
+            arguments=[]
+        ),
+        Prompt(
             name="summarize-documents",
             description="Summarize information from multiple document chunks",
             arguments=[
@@ -327,7 +385,47 @@ async def list_prompts() -> list[Prompt]:
 async def get_prompt(name: str, arguments: dict[str, str] | None) -> PromptMessage:
     """Generate a prompt with the given arguments."""
 
-    if name == "extract-answer":
+    if name == "memory-protocol":
+        prompt_text = """# Semantic Memory Protocol
+
+You have access to a long-term semantic memory via the `recall` and `remember` tools. Follow this protocol to ensure continuity across sessions.
+
+## 1. Memory First — Before Starting Any Task
+Before writing code or making changes, use the `recall` tool to check for relevant context:
+- Previous attempts at the same or similar tasks
+- Known solutions, error resolutions, or workarounds
+- User preferences and coding conventions
+- Architectural decisions and their rationale
+
+Integrate retrieved context seamlessly into your plan. If memory contains a prior fix or decision, prioritize it.
+
+## 2. Auto-Archive — After Completing a Task
+After successfully completing a task (bug fix, feature, refactor, decision), use the `remember` tool to persist:
+- A 2-3 sentence summary of what was done and why
+- Use a descriptive source tag (e.g., 'bug-fix:auth-timeout', 'decision:use-postgres')
+
+Only archive significant outcomes — skip trivial changes like typo fixes.
+
+## 3. Conflict Resolution
+If memory contradicts the current codebase:
+1. Trust the **codebase** for current syntax and state
+2. Trust **memory** for intent and rationale (the "why")
+3. If uncertain, ask the user before proceeding
+
+## 4. What NOT to Store
+- Transient debugging output or intermediate reasoning
+- Verbatim code blocks (reference file paths instead)
+- Information already in the codebase (comments, READMEs)
+
+---
+*Prioritize retrieval over assumption. Memory is shared across sessions.*"""
+
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=prompt_text)
+        )
+
+    elif name == "extract-answer":
         query = arguments.get("query", "") if arguments else ""
         chunks_json = arguments.get("chunks", "[]") if arguments else "[]"
 

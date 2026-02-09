@@ -13,15 +13,16 @@ class TestPrompts:
     """Essential tests for MCP prompt functionality."""
 
     @pytest.mark.asyncio
-    async def test_list_prompts_returns_two_prompts(self):
-        """Test that users can discover both available prompts."""
+    async def test_list_prompts_returns_all_prompts(self):
+        """Test that users can discover all available prompts."""
         prompts = await list_prompts()
 
-        assert len(prompts) == 2
+        assert len(prompts) == 3
 
         prompt_names = [p.name for p in prompts]
         assert "extract-answer" in prompt_names
         assert "summarize-documents" in prompt_names
+        assert "memory-protocol" in prompt_names
 
     @pytest.mark.asyncio
     async def test_extract_answer_includes_query_and_chunks(self):
