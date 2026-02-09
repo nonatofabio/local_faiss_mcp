@@ -45,6 +45,10 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# PDF test files
+*.pdf
+pdf_docs/
+
 #MCP
 MCP_REGISTRY.md
 .mcpregistry_*_token
