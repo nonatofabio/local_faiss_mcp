@@ -10,7 +10,7 @@
 
 Test whether the agent **proactively** follows the memory protocol based on tool descriptions alone, without explicit user instructions to use memory.
 
-## Results
+## Round 1: Tool Descriptions Only (run from project directory)
 
 | # | Test | Recall? | Remember? | Result |
 |---|------|---------|-----------|--------|
@@ -22,70 +22,78 @@ Test whether the agent **proactively** follows the memory protocol based on tool
 
 **Overall: 1/5 passed. The agent did not proactively use memory in any test.**
 
-## Detailed Findings
+### What Happened
+- Agent defaulted to reading CLAUDE.md and source files every time
+- Tool descriptions ("use BEFORE starting a task") were treated as suggestions, not mandates
+- When the codebase had enough context to answer, the agent never reached for memory
 
-### Test 1: Proactive Recall on Past Decision
-**Prompt**: "Should I add a new REST endpoint for user notifications?"
-**Expected**: Agent recalls the GraphQL migration decision and advises against REST.
-**Actual**: Agent read CLAUDE.md, answered about MCP tools (wrong context entirely). Never checked memory. The stored "we migrated to GraphQL, REST is deprecated" decision was completely missed.
+## Round 2: Server Naming (no effect)
 
-### Test 2: Proactive Remember After Task
-**Prompt**: "The concurrent write bug in FAISS save() — I just added file locking with fcntl.flock(). The permanent fix is done now."
-**Expected**: Agent recalls the prior bug-fix history, then stores the resolution.
-**Actual**: Agent went straight to reading server.py code, reported the fix wasn't in the code. Never recalled the prior bug context. Never stored anything.
+Renamed the MCP server from `local-faiss-mcp` to `memory` so tools appear as `mcp__memory__recall`. Reran tests 1, 2, 3.
 
-### Test 3: Contradictory Recall Handling
-**Prompt**: "I need to add a new public API endpoint. What format should I use?"
-**Expected**: Agent recalls both GraphQL migration AND REST revert, notices the conflict.
-**Actual**: Agent never recalled. Answered generically about MCP tool format from CLAUDE.md.
+**Result: 0/3. No change.** Tool names alone don't influence agent prioritization.
 
-### Test 4: Trivial Task — No Over-Storage
-**Prompt**: "What is the default embedding model used by this project?"
-**Expected**: Agent answers from code, does NOT store in memory.
-**Actual**: Agent answered correctly from CLAUDE.md. Did not store. **This is the desired behavior.**
+## Round 3: Server `instructions` Field (run from project directory)
 
-### Test 5: Seamless Context Integration
-**Prompt**: "What coding conventions should I follow for this project?"
-**Expected**: Agent recalls stored preferences (imperative commits, no emojis, type annotations, pytest fixtures).
-**Actual**: Agent answered generically from codebase structure. Never checked memory. Stored preferences were completely missed.
+Added behavioral instructions to the MCP `Server()` constructor:
+
+> "This server is your long-term memory. Use the 'recall' tool BEFORE starting any task..."
+
+Reran tests 1, 2, 3 from the **project directory** (where CLAUDE.md exists).
+
+**Result: 0/3. No change.** When CLAUDE.md is available, the agent still prefers local file reading over memory tools, even with server instructions.
+
+## Round 4: Server `instructions` + Outside Project Directory
+
+Same server instructions, but ran `claude -p` from `/tmp/memory_protocol_test/` — a directory with **no CLAUDE.md, no source code, no codebase context**.
+
+| # | Test | Recall? | Context Integrated? | Result |
+|---|------|---------|---------------------|--------|
+| 1 | "Should I add a new REST endpoint?" | YES | YES — cited GraphQL→REST revert | PASS |
+| 2 | Bug fix follow-up | YES | YES — recalled prior bug history | PASS |
+| 3 | "What coding conventions?" | YES | YES — surfaced stored preferences | PASS |
+
+**Overall: 3/3 passed.**
+
+### What Changed
+- The agent called `recall` as its **first action** in all three tests
+- Retrieved context was seamlessly integrated into responses
+- Test 1: Agent found the REST revert decision and recommended REST for the new endpoint
+- Test 3: Agent surfaced "no emojis, imperative commits, type annotations, pytest fixtures" — all from memory
 
 ## Analysis
 
-### What Works
-- Tool descriptions successfully guide behavior **when the user explicitly references memory** (confirmed in prior integration tests with phrases like "check your memory" or "what was the database decision")
-- The agent correctly avoids over-storing trivial interactions (Test 4)
-- Backward compatibility is solid
+### The Two Factors
 
-### What Doesn't Work
-- **Tool descriptions alone are not enough to trigger proactive memory use.** The agent defaults to its standard behavior: read files, answer from codebase context.
-- The "BEFORE starting a new task" guidance in the `recall` tool description is ignored when the agent has other tools available (Read, Glob, Grep) that it prefers.
-- The "AFTER completing a task" guidance in the `remember` description is similarly ignored — the agent considers the task done after giving its answer.
+Proactive memory use requires **both**:
 
-### Root Cause
-This confirms the core observation from issue #17:
+1. **Server `instructions`** — tells the agent "this is your memory, use it before every task"
+2. **Absence of richer local context** — when CLAUDE.md and source files are available, the agent satisfies the query from those and never reaches for memory
 
-> "Having to tell an agent 'use the vector DB' is not how memory should work. Memory should be implicit."
+This means the MCP server instructions **work** — but they compete with the agent's preference for local file reading. Memory becomes the fallback, not the first choice.
 
-The MCP tool description approach moves the behavioral instructions from a client-specific config (SKILL.md) into the server itself — which is architecturally better. But the **behavioral compliance is still opt-in** at the agent level. The agent reads tool descriptions as capabilities ("I can do this"), not as mandates ("I must do this").
+### When Memory Wins vs When Files Win
 
-### Comparison: Explicit vs Implicit Prompting
+| Scenario | Agent uses memory? | Why |
+|----------|-------------------|-----|
+| No local codebase context | YES | Memory is the only source of project knowledge |
+| CLAUDE.md exists with relevant info | NO | Agent satisfies query from local files |
+| User explicitly references past decisions | YES | Agent recognizes this needs historical context |
+| Question about conventions/preferences (not in files) | DEPENDS | Only if that info isn't in CLAUDE.md |
 
-| Approach | Recall triggered? | Notes |
-|----------|------------------|-------|
-| "What was the database decision?" (explicit memory cue) | YES | Agent recognizes this as a memory question |
-| "Check your memory for..." (explicit instruction) | YES | Agent follows direct instructions |
-| "Should I add a REST endpoint?" (natural task) | NO | Agent uses codebase tools instead |
-| "What conventions should I follow?" (natural task) | NO | Agent reads project files instead |
+### Implications for Real Usage
+
+In practice, memory is most valuable for information that **isn't in the codebase**:
+- Past decisions and their rationale
+- Bug fix history and lessons learned
+- User preferences not documented in CLAUDE.md
+- Cross-session context
+
+The server `instructions` field ensures the agent checks memory when it doesn't have local files to lean on — which is exactly the scenario where memory matters most (new sessions, new directories, cross-project context).
 
 ## Recommendations
 
-1. **Accept the limitation for this PR**: The recall/remember tools and memory-protocol prompt are still valuable — they work when invoked and when the context suggests memory. This is a meaningful improvement over having no memory abstraction at all.
-
-2. **Future: System prompt integration**: For truly proactive memory, the behavioral protocol needs to be in the agent's system prompt, not just a tool description. The `memory-protocol` MCP prompt exists for this — clients that support prompt injection at session start can use it.
-
-3. **Future: MCP Sampling**: When MCP supports server-initiated actions (sampling), the server could proactively query memory on behalf of the agent. This would make memory truly implicit.
-
-4. **Future: Hook-based approach**: Some MCP clients support pre-task hooks. A hook that calls `recall` before every task would achieve implicit memory without agent cooperation.
-
-## Raw Data
-Test outputs stored in `/tmp/memory_protocol_test/agent_behavior_results/`
+1. **Ship with server `instructions`** — they work and they're MCP-standard
+2. **Document the interaction with CLAUDE.md** — users should know that memory complements, not replaces, local project files
+3. **Future: System prompt injection** — for environments where memory must override local files, the `memory-protocol` MCP prompt can be injected into the agent's system prompt by supporting clients
+4. **Future: MCP Sampling / Hooks** — server-initiated recall would bypass the agent's tool prioritization entirely

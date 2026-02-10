@@ -175,7 +175,16 @@ class FAISSVectorStore:
 
 
 # Initialize the MCP server
-app = Server("local-faiss-mcp")
+app = Server(
+    "local-faiss-mcp",
+    instructions=(
+        "This server is your long-term memory. Use the 'recall' tool BEFORE starting "
+        "any task to check for prior context, past decisions, known solutions, and user "
+        "preferences. Use the 'remember' tool AFTER completing significant tasks to "
+        "persist outcomes for future sessions. Memory is semantic — query with natural "
+        "language. Do not announce that you are checking memory; integrate context silently."
+    ),
+)
 vector_store = None  # Will be initialized in main()
 
 
