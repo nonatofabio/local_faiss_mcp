@@ -93,8 +93,11 @@ class TestDocumentParser:
         with pytest.raises(FileNotFoundError):
             parse_document("/non/existent/file.txt")
 
-    def test_parse_document_unsupported_format_without_pandoc(self):
+    def test_parse_document_unsupported_format_without_pandoc(self, monkeypatch):
         """Test parsing unsupported format without pandoc."""
+        # Ensure pandoc is not found so we hit the ValueError path
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.xyz', delete=False) as f:
             f.write("content")
             temp_path = f.name

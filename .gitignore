@@ -49,6 +49,9 @@ Thumbs.db
 *.pdf
 pdf_docs/
 
+# Test artifacts
+tests/stress_test/
+
 #MCP
 MCP_REGISTRY.md
 .mcpregistry_*_token
