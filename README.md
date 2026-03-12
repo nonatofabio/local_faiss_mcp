@@ -6,6 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://github.com/nonatofabio/local_faiss_mcp/workflows/Tests/badge.svg)](https://github.com/nonatofabio/local_faiss_mcp/actions)
 [![PyPI version](https://badge.fury.io/py/local-faiss-mcp.svg)](https://badge.fury.io/py/local-faiss-mcp)
+[![MCPAmpel](https://img.shields.io/endpoint?url=https://mcpampel.com/badge/nonatofabio/local_faiss_mcp.json)](https://mcpampel.com/repo/nonatofabio/local_faiss_mcp)
 
 A Model Context Protocol (MCP) server that provides local vector database functionality using FAISS for Retrieval-Augmented Generation (RAG) applications.
 
