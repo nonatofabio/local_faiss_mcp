@@ -27,6 +27,10 @@ A Model Context Protocol (MCP) server that provides local vector database functi
 - **Custom Embeddings**: Choose any Hugging Face embedding model
 - **MCP Prompts**: Built-in prompts for answer extraction and summarization
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/nonatofabio-local-faiss-mcp).
+
 ## Quickstart
 
 ```bash
