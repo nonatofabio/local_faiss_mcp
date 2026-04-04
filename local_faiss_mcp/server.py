@@ -90,6 +90,78 @@ class FAISSVectorStore:
 
         return chunks
 
+    def find_similar(self, text: str, threshold: float = 1.3, top_k: int = 3) -> list[dict[str, Any]]:
+        """Find existing memories similar to the given text.
+
+        Args:
+            text: Text to compare against existing memories.
+            threshold: Maximum L2 distance to consider similar (lower = more similar).
+                       For all-MiniLM-L6-v2: <0.4 = near-duplicate, <1.3 = same topic.
+            top_k: Maximum number of similar memories to return.
+
+        Returns:
+            List of similar memories with id, text, source, distance, and similarity score.
+        """
+        if self.index.ntotal == 0:
+            return []
+
+        embedding = self.embedding_model.encode([text], convert_to_numpy=True)
+        k = min(top_k, self.index.ntotal)
+        distances, indices = self.index.search(embedding.astype('float32'), k)
+
+        similar = []
+        for dist, idx in zip(distances[0], indices[0]):
+            if idx < len(self.metadata["documents"]) and dist <= threshold:
+                doc = self.metadata["documents"][idx]
+                similar.append({
+                    "id": int(idx),
+                    "text": doc["text"],
+                    "source": doc["source"],
+                    "distance": float(dist),
+                    "similarity": round(1 - float(dist) / 2, 3),
+                    "indexed_at": doc.get("indexed_at", "unknown"),
+                })
+        return similar
+
+    def update_memory(self, memory_id: int, new_text: str, source: str | None = None) -> dict[str, Any]:
+        """Replace an existing memory's text and re-embed it.
+
+        Args:
+            memory_id: Index of the memory to update.
+            new_text: New text content for the memory.
+            source: Optional new source tag. Keeps existing if not provided.
+
+        Returns:
+            Dict with success status and updated memory info.
+        """
+        if memory_id < 0 or memory_id >= len(self.metadata["documents"]):
+            return {"success": False, "error": f"Memory ID {memory_id} not found"}
+
+        # Re-embed the new text
+        import numpy as np
+        embedding = self.embedding_model.encode([new_text], convert_to_numpy=True)
+
+        # Replace the vector in FAISS — update in place via internal storage
+        xb = faiss.rev_swig_ptr(self.index.get_xb(), self.index.ntotal * self.dimension)
+        xb = xb.reshape(self.index.ntotal, self.dimension)
+        xb[memory_id] = embedding.astype('float32')[0]
+
+        # Update metadata
+        doc = self.metadata["documents"][memory_id]
+        doc["text"] = new_text
+        doc["indexed_at"] = datetime.now().isoformat()
+        if source is not None:
+            doc["source"] = source
+
+        self.save()
+
+        return {
+            "success": True,
+            "memory_id": memory_id,
+            "source": doc["source"],
+            "text_preview": new_text[:200],
+        }
+
     def ingest(self, document: str, source: str = "unknown") -> dict[str, Any]:
         """Ingest a document into the vector store."""
         # Chunk the document
@@ -234,10 +306,9 @@ async def list_tools() -> list[Tool]:
             name="remember",
             description=(
                 "Store important information in long-term memory. "
-                "Use this AFTER completing a task to persist: decisions made, bugs fixed, "
-                "architectural choices, user preferences, error resolutions, and lessons learned. "
-                "Include a descriptive source tag for future retrieval. "
-                "This ensures continuity across sessions — the agent can recall this information later."
+                "By default, checks for similar existing memories first. "
+                "If similar memories are found, review them and call remember again with "
+                "update_id to replace an existing memory, or force=true to store as new."
             ),
             inputSchema={
                 "type": "object",
@@ -248,8 +319,17 @@ async def list_tools() -> list[Tool]:
                     },
                     "source": {
                         "type": "string",
-                        "description": "A descriptive tag for this memory (e.g., 'bug-fix:auth-timeout', 'decision:use-postgres', 'preference:python-style')",
+                        "description": "A descriptive tag for this memory (e.g., 'bug-fix:auth-timeout', 'decision:use-postgres')",
                         "default": "memory"
+                    },
+                    "update_id": {
+                        "type": "number",
+                        "description": "If set, updates the existing memory with this ID instead of creating a new one"
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "If true, stores without checking for similar memories",
+                        "default": False
                     }
                 },
                 "required": ["document"]
@@ -287,17 +367,63 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     """Handle tool calls."""
 
-    if name in ("ingest_document", "remember"):
+    if name == "remember":
         document = arguments.get("document")
-        source = arguments.get("source", "memory" if name == "remember" else "unknown")
+        source = arguments.get("source", "memory")
+        update_id = arguments.get("update_id")
+        force = arguments.get("force", False)
+
+        # Mode 1: Update existing memory by ID
+        if update_id is not None:
+            result = vector_store.update_memory(int(update_id), document, source)
+            if result["success"]:
+                message = f"Updated memory ID {int(update_id)} (source: '{result['source']}')."
+            else:
+                message = f"Failed to update: {result.get('error', 'Unknown error')}"
+            return [TextContent(type="text", text=message)]
+
+        # Mode 2: Force store (skip dedup check)
+        if force:
+            result = vector_store.ingest(document, source)
+            if result["success"]:
+                message = f"Stored in memory (source: '{source}'). {result['chunks_added']} chunk(s) added."
+            else:
+                message = f"Failed to store: {result.get('error', 'Unknown error')}"
+            return [TextContent(type="text", text=message)]
+
+        # Mode 3: Default — check for similar memories first
+        similar = vector_store.find_similar(document, threshold=1.3, top_k=3)
+
+        if similar:
+            message = "Found similar existing memories before storing:\n\n"
+            for i, mem in enumerate(similar, 1):
+                message += f"{i}. [ID: {mem['id']}] (similarity: {mem['similarity']}) "
+                message += f"source: {mem['source']}\n"
+                message += f"   \"{mem['text'][:200]}\"\n"
+                message += f"   indexed: {mem['indexed_at']}\n\n"
+            message += "Memory was NOT stored. To proceed, call remember again with:\n"
+            message += "- update_id=<id> to update an existing memory\n"
+            message += "- force=true to store as new alongside existing ones\n"
+            message += "- Or do nothing to discard\n"
+            return [TextContent(type="text", text=message)]
+
+        # No similar memories — store immediately
+        result = vector_store.ingest(document, source)
+        if result["success"]:
+            message = f"Stored in memory (source: '{source}'). {result['chunks_added']} chunk(s) added."
+        else:
+            message = f"Failed to store: {result.get('error', 'Unknown error')}"
+        return [TextContent(type="text", text=message)]
+
+    elif name == "ingest_document":
+        document = arguments.get("document")
+        source = arguments.get("source", "memory" if name == "remember_force" else "unknown")
 
         # Auto-detect if document is a file path
         if is_file_path(document):
             try:
                 file_path = Path(document)
-                # Parse the document file
                 document_text = parse_document(file_path)
-                # Use filename as source if not specified
                 if source == "unknown":
                     source = file_path.name
                 document = document_text
@@ -305,14 +431,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 return [TextContent(type="text", text=f"Failed to parse document: {str(e)}")]
 
         result = vector_store.ingest(document, source)
-
         if result["success"]:
-            message = f"Successfully ingested document from '{source}'.\n"
-            message += f"Created {result['chunks_added']} chunks.\n"
-            message += f"Total documents in store: {result['total_documents']}"
+            message = f"Stored in memory (source: '{source}'). {result['chunks_added']} chunk(s) added."
         else:
-            message = f"Failed to ingest document: {result.get('error', 'Unknown error')}"
-
+            message = f"Failed to store: {result.get('error', 'Unknown error')}"
         return [TextContent(type="text", text=message)]
 
     elif name in ("query_rag_store", "recall"):
