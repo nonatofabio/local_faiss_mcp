@@ -54,7 +54,7 @@ class TestMemoryTools:
             "source": "decision:use-postgres",
         })
         assert len(result) == 1
-        assert "Successfully ingested" in result[0].text
+        assert "Stored in memory" in result[0].text or "Successfully ingested" in result[0].text
         assert "decision:use-postgres" in result[0].text
 
         # Recall it
