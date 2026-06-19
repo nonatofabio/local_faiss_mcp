@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/nonatofabio-local-faiss-mcp-badge.png)](https://mseep.ai/app/nonatofabio-local-faiss-mcp)
+
 # Local FAISS MCP Server
 
 <!-- mcp-name: io.github.nonatofabio/local-faiss-mcp -->
