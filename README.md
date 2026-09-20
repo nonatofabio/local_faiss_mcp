@@ -298,9 +298,37 @@ Results show:
 - Re-rank score (if enabled in MCP config)
 - Text preview (first 300 characters)
 
+### Delete and Update Commands
+
+Remove indexed documents without rebuilding the whole store by hand:
+
+```bash
+# Preview what would be removed
+local-faiss delete --dry-run "docs/*.pdf"
+
+# Delete all chunks for a source
+local-faiss delete document.pdf
+
+# Delete matching indexed sources
+local-faiss delete "docs/*.md"
+```
+
+Update deletes matching indexed chunks first, then re-indexes the supplied file,
+folder, or glob:
+
+```bash
+local-faiss update document.pdf
+local-faiss update -r docs/
+```
+
+Delete/update match indexed `source` values, including basenames and glob
+patterns. The index is rebuilt from remaining metadata and saved with atomic
+file replacement so an interrupted rebuild leaves the previous index usable.
+
 ### CLI Features
 
 - ✅ **Incremental indexing**: Adds to existing index, doesn't overwrite
+- ✅ **Index maintenance**: Delete or update indexed sources with dry-run support
 - ✅ **Progress output**: Shows indexing progress for each file
 - ✅ **Shared config**: Uses same settings as MCP server
 - ✅ **Auto-detection**: Supports glob patterns and recursive folders

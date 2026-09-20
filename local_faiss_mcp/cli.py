@@ -12,6 +12,7 @@ import sys
 import os
 import json
 import argparse
+import fnmatch
 from pathlib import Path
 from glob import glob as glob_files
 from typing import List, Optional, Dict, Any
@@ -195,6 +196,63 @@ def collect_files(patterns: List[str], recursive: bool = False) -> List[Path]:
     return unique_files
 
 
+def load_source_counts(metadata_path: Path) -> Dict[str, int]:
+    """Load indexed source names and chunk counts from metadata."""
+    if not metadata_path.exists():
+        return {}
+
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+    source_chunks = defaultdict(int)
+    for doc in metadata.get('documents', []):
+        source_chunks[doc.get('source', 'unknown')] += 1
+    return dict(source_chunks)
+
+
+def source_matches_pattern(source: str, pattern: str) -> bool:
+    """Return whether an indexed source matches a delete/update pattern."""
+    normalized_source = source.replace("\\", "/")
+    normalized_pattern = pattern.replace("\\", "/")
+    source_name = Path(source).name
+    pattern_name = Path(pattern).name
+
+    return (
+        source == pattern
+        or normalized_source == normalized_pattern
+        or source_name == pattern
+        or source_name == pattern_name
+        or fnmatch.fnmatch(normalized_source, normalized_pattern)
+        or fnmatch.fnmatch(source_name, normalized_pattern)
+        or fnmatch.fnmatch(source_name, pattern_name)
+    )
+
+
+def resolve_indexed_sources(patterns: List[str], metadata_path: Path) -> Dict[str, int]:
+    """Resolve user patterns to indexed source names and chunk counts."""
+    source_counts = load_source_counts(metadata_path)
+    matched = {}
+
+    for pattern in patterns:
+        for source, count in source_counts.items():
+            if source_matches_pattern(source, pattern):
+                matched[source] = count
+
+    return matched
+
+
+def make_vector_store(config: Dict[str, Any]) -> FAISSVectorStore:
+    """Create a vector store using CLI configuration."""
+    index_dir = Path(config['index_dir']).resolve()
+    index_dir.mkdir(parents=True, exist_ok=True)
+    return FAISSVectorStore(
+        index_path=str(index_dir / "faiss.index"),
+        metadata_path=str(index_dir / "metadata.json"),
+        embedding_model_name=config['embed_model'],
+        rerank_model_name=config['rerank_model']
+    )
+
+
 def cmd_index(args):
     """Index documents into the vector store."""
     # Get configuration
@@ -319,6 +377,64 @@ def cmd_search(args):
         print("-"*60)
 
     return 0
+
+
+def cmd_delete(args):
+    """Delete indexed documents from the vector store."""
+    config = get_faiss_config()
+    index_dir = Path(config['index_dir']).resolve()
+    index_path = index_dir / "faiss.index"
+    metadata_path = index_dir / "metadata.json"
+
+    if not metadata_path.exists():
+        print(info("No documents indexed yet."))
+        return 0
+
+    matched_sources = resolve_indexed_sources(args.sources, metadata_path)
+    if not matched_sources:
+        print(warning("No indexed sources matched the supplied pattern(s)."))
+        return 0
+
+    if args.dry_run:
+        print("\nWould delete:")
+        for source, chunks in sorted(matched_sources.items()):
+            print(f"- {source} ({chunks} chunk(s))")
+        print(info(f"Total chunks: {sum(matched_sources.values())}"))
+        return 0
+
+    if not index_path.exists():
+        print(error(f"No index found at {index_dir}"), file=sys.stderr)
+        return 1
+
+    vector_store = make_vector_store(config)
+    result = vector_store.remove_sources(set(matched_sources))
+
+    removed_chunks = result["removed_chunks"]
+    removed_source_count = len(result["removed_sources"])
+    print(success(f"Removed {removed_chunks} chunk(s) from {removed_source_count} source(s)."))
+    return 0
+
+
+def cmd_update(args):
+    """Update indexed documents by deleting and re-indexing them."""
+    config = get_faiss_config()
+    index_dir = Path(config['index_dir']).resolve()
+    metadata_path = index_dir / "metadata.json"
+
+    matched_sources = resolve_indexed_sources(args.files, metadata_path)
+    if not matched_sources:
+        print(warning("No existing indexed sources matched; indexing as new document(s)."))
+    elif args.dry_run:
+        print("\nWould update:")
+        for source, chunks in sorted(matched_sources.items()):
+            print(f"- {source} ({chunks} existing chunk(s))")
+        return 0
+    else:
+        vector_store = make_vector_store(config)
+        result = vector_store.remove_sources(set(matched_sources))
+        print(info(f"Removed {result['removed_chunks']} existing chunk(s) before update."))
+
+    return cmd_index(args)
 
 
 def cmd_list(args):
@@ -486,6 +602,37 @@ Examples:
         help='Output in JSON format for machine-readable output'
     )
 
+    # Delete command
+    delete_parser = subparsers.add_parser('delete', help='Delete indexed documents from vector store')
+    delete_parser.add_argument(
+        'sources',
+        nargs='+',
+        help='Indexed source names or glob patterns to delete'
+    )
+    delete_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be deleted without modifying the index'
+    )
+
+    # Update command
+    update_parser = subparsers.add_parser('update', help='Delete and re-index documents')
+    update_parser.add_argument(
+        'files',
+        nargs='+',
+        help='Files, folders, or glob patterns to update'
+    )
+    update_parser.add_argument(
+        '-r', '--recursive',
+        action='store_true',
+        help='Recursively search folders for documents'
+    )
+    update_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be updated without modifying the index'
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -498,6 +645,10 @@ Examples:
         return cmd_search(args)
     elif args.command == 'list':
         return cmd_list(args)
+    elif args.command == 'delete':
+        return cmd_delete(args)
+    elif args.command == 'update':
+        return cmd_update(args)
     else:
         parser.print_help()
         return 1

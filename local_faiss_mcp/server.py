@@ -10,6 +10,7 @@ import os
 import sys
 import argparse
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 from datetime import datetime
@@ -74,9 +75,40 @@ class FAISSVectorStore:
 
     def save(self):
         """Persist index and metadata to disk."""
-        faiss.write_index(self.index, self.index_path)
-        with open(self.metadata_path, 'w') as f:
-            json.dump(self.metadata, f, indent=2)
+        index_path = Path(self.index_path)
+        metadata_path = Path(self.metadata_path)
+
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.NamedTemporaryFile(
+            dir=index_path.parent,
+            prefix=f"{index_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_index:
+            tmp_index_path = Path(tmp_index.name)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=metadata_path.parent,
+            prefix=f"{metadata_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_metadata:
+            tmp_metadata_path = Path(tmp_metadata.name)
+            json.dump(self.metadata, tmp_metadata, indent=2)
+
+        try:
+            faiss.write_index(self.index, str(tmp_index_path))
+            os.replace(tmp_index_path, index_path)
+            os.replace(tmp_metadata_path, metadata_path)
+        finally:
+            for tmp_path in (tmp_index_path, tmp_metadata_path):
+                try:
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+                except OSError:
+                    pass
 
     def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
         """Split text into overlapping chunks."""
@@ -194,6 +226,56 @@ class FAISSVectorStore:
             "success": True,
             "chunks_added": len(chunks),
             "total_documents": len(self.metadata["documents"])
+        }
+
+    def remove_sources(self, sources: set[str], dry_run: bool = False) -> dict[str, Any]:
+        """Remove all chunks whose source matches one of the given source names."""
+        if not sources:
+            return {
+                "success": True,
+                "removed_chunks": 0,
+                "removed_sources": {},
+                "dry_run": dry_run,
+            }
+
+        documents = self.metadata.get("documents", [])
+        remaining = []
+        removed_sources: dict[str, int] = {}
+
+        for doc in documents:
+            source = doc.get("source", "unknown")
+            if source in sources:
+                removed_sources[source] = removed_sources.get(source, 0) + 1
+            else:
+                remaining.append(doc)
+
+        removed_chunks = sum(removed_sources.values())
+        if dry_run or removed_chunks == 0:
+            return {
+                "success": True,
+                "removed_chunks": removed_chunks,
+                "removed_sources": removed_sources,
+                "dry_run": dry_run,
+            }
+
+        for idx, doc in enumerate(remaining):
+            doc["id"] = idx
+
+        new_index = faiss.IndexFlatL2(self.dimension)
+        if remaining:
+            texts = [doc["text"] for doc in remaining]
+            embeddings = self.embedding_model.encode(texts, convert_to_numpy=True)
+            new_index.add(embeddings.astype("float32"))
+
+        self.index = new_index
+        self.metadata["documents"] = remaining
+        self.save()
+
+        return {
+            "success": True,
+            "removed_chunks": removed_chunks,
+            "removed_sources": removed_sources,
+            "dry_run": dry_run,
         }
 
     def query(self, query_text: str, top_k: int = 3) -> list[dict[str, Any]]:
